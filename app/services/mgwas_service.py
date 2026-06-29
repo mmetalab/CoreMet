@@ -31,7 +31,8 @@ def get_mgwas_db() -> pd.DataFrame:
         if _mgwas_db is not None:
             return _mgwas_db
         try:
-            _mgwas_db = pd.read_csv(MGWAS_DB_PATH, dtype=str).fillna("")
+            from app.services.csv_loader import load_optimized
+            _mgwas_db = load_optimized(MGWAS_DB_PATH)
             logger.info(f"mGWAS database loaded: {len(_mgwas_db):,} records")
         except FileNotFoundError:
             logger.warning(f"mGWAS database not found at {MGWAS_DB_PATH}")

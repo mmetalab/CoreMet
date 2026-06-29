@@ -76,4 +76,5 @@ def load_mei_db():
     base = Path(__file__).parent.parent.parent / "data" / "databases"
     release = base / "release" / "coremetdb_mei.csv"
     path = release if release.exists() else base / "mei_database_v2_enriched.csv"
-    return pd.read_csv(path, low_memory=False)
+    from app.services.csv_loader import load_optimized
+    return load_optimized(path)

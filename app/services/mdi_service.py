@@ -31,7 +31,8 @@ def get_mdi_db() -> pd.DataFrame:
         if _mdi_db is not None:
             return _mdi_db
         try:
-            _mdi_db = pd.read_csv(MDI_DB_PATH, dtype=str).fillna("")
+            from app.services.csv_loader import load_optimized
+            _mdi_db = load_optimized(MDI_DB_PATH)
             logger.info(f"MDI database loaded: {len(_mdi_db):,} records")
         except FileNotFoundError:
             logger.warning(f"MDI database not found at {MDI_DB_PATH}")

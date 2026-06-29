@@ -31,7 +31,8 @@ def get_mgi_db() -> pd.DataFrame:
         if _mgi_db is not None:
             return _mgi_db
         try:
-            _mgi_db = pd.read_csv(MGI_DB_PATH, dtype=str).fillna("")
+            from app.services.csv_loader import load_optimized
+            _mgi_db = load_optimized(MGI_DB_PATH)
             logger.info(f"MGI database loaded: {len(_mgi_db):,} records")
         except FileNotFoundError:
             logger.warning(f"MGI database not found at {MGI_DB_PATH}")

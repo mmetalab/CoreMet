@@ -91,6 +91,7 @@ def load_mgwas_db():
     rel = Path(__file__).parent.parent.parent / "data" / "databases" / "release" / "coremetdb_mgwas.csv"
     v2 = rel if rel.exists() else Path(__file__).parent.parent.parent / "data" / "databases_v2" / "mgwas_database_v2.csv"
     if v2.exists():
-        return pd.read_csv(v2, low_memory=False)
+        from app.services.csv_loader import load_optimized
+        return load_optimized(v2)
     from app.services.mgwas_service import get_mgwas_db
     return get_mgwas_db()

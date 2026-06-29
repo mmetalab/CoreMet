@@ -40,7 +40,8 @@ def get_mdri_db() -> pd.DataFrame:
         if _mdri_cache is not None:
             return _mdri_cache
         try:
-            df = pd.read_csv(MDRI_DB_PATH, dtype=str).fillna("")
+            from app.services.csv_loader import load_optimized
+            df = load_optimized(MDRI_DB_PATH)
             logger.info(f"MDrI database loaded: {len(df):,} records")
             _mdri_cache = df
         except FileNotFoundError:

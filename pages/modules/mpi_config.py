@@ -78,6 +78,7 @@ def load_mpi_db():
     rel = Path(__file__).parent.parent.parent / "data" / "databases" / "release" / "coremetdb_mpi.csv"
     v2_path = rel if rel.exists() else Path(__file__).parent.parent.parent / "data" / "databases_v2" / "mpi_database_v2.csv"
     if v2_path.exists():
-        return pd.read_csv(v2_path, low_memory=False)
+        from app.services.csv_loader import load_optimized
+        return load_optimized(v2_path)
     from app.services.data_service import get_db
     return get_db()

@@ -84,6 +84,7 @@ def load_mdi_db():
     import pandas as pd
     rel = Path(__file__).parent.parent.parent / "data" / "databases" / "release" / "coremetdb_mdi.csv"
     if rel.exists():
-        return pd.read_csv(rel, low_memory=False)
+        from app.services.csv_loader import load_optimized
+        return load_optimized(rel)
     from app.services.mdi_service import get_mdi_db
     return get_mdi_db()

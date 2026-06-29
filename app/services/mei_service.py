@@ -30,7 +30,8 @@ def get_mei_db() -> pd.DataFrame:
         if _mei_db is not None:
             return _mei_db
         try:
-            _mei_db = pd.read_csv(MEI_DB_PATH, dtype=str).fillna("")
+            from app.services.csv_loader import load_optimized
+            _mei_db = load_optimized(MEI_DB_PATH)
             logger.info(f"MEI database loaded: {len(_mei_db):,} records")
         except FileNotFoundError:
             logger.warning(f"MEI database not found at {MEI_DB_PATH}")

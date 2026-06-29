@@ -41,7 +41,8 @@ def get_mmi_db() -> pd.DataFrame:
         if _mmi_cache is not None:
             return _mmi_cache
         try:
-            df = pd.read_csv(MMI_DB_PATH, dtype=str).fillna("")
+            from app.services.csv_loader import load_optimized
+            df = load_optimized(MMI_DB_PATH)
             logger.info(f"MMI database loaded: {len(df):,} records")
             _mmi_cache = df
         except FileNotFoundError:
