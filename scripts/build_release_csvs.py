@@ -50,6 +50,10 @@ def main() -> None:
         df = pd.read_csv(path, dtype=str, low_memory=False)
         if name == "MPI":
             df = df[df["Evidence_Source"].notna() | (df["interaction_subtype"] == "reaction_participant")]
+            # Rhea reaction_participant rows carry a RHEA reaction_id but no Evidence_Source;
+            # label their provenance so every released record has a source.
+            _no_src = df["Evidence_Source"].isna() | (df["Evidence_Source"].astype(str).str.strip() == "")
+            df.loc[_no_src, "Evidence_Source"] = "Rhea"
         df = df.drop_duplicates(subset=keys)
         df.to_csv(out, index=False)
         flag = "OK" if len(df) == target else "MISMATCH!"
