@@ -322,6 +322,8 @@ EXAMPLE_QUERIES = [
     {"name": "Metformin", "type": "drug"},
 ]
 
+DEFAULT_QUERY = EXAMPLE_QUERIES[0]
+
 
 # ---------------------------------------------------------------------------
 # LAYOUT
@@ -370,6 +372,7 @@ page_content = html.Div(
                                                 id="net-query-input",
                                                 placeholder="e.g. Glucose, TP53, Alzheimer …",
                                                 type="text",
+                                                value=DEFAULT_QUERY["name"],
                                                 debounce=True,
                                             ),
                                             dbc.Button(
@@ -660,17 +663,41 @@ def set_example_query(*args):
 @callback(
     Output("net-elements-store", "data"),
     Output("net-stats-store", "data"),
+    Input("url", "pathname"),
     Input("net-search-btn", "n_clicks"),
     Input("net-query-input", "n_submit"),
+    Input({"type": "net-example", "index": 0}, "n_clicks"),
+    Input({"type": "net-example", "index": 1}, "n_clicks"),
+    Input({"type": "net-example", "index": 2}, "n_clicks"),
+    Input({"type": "net-example", "index": 3}, "n_clicks"),
+    Input({"type": "net-example", "index": 4}, "n_clicks"),
     State("net-query-input", "value"),
     State("net-query-type", "value"),
     State("net-type-filter", "value"),
     State("net-organism-filter", "value"),
     State("net-max-nodes", "value"),
-    prevent_initial_call=True,
 )
-def run_network_search(_n_clicks, _n_submit, query, query_type, types, organism, max_nodes):
+def run_network_search(
+    pathname, _n_clicks, _n_submit,
+    _ex0, _ex1, _ex2, _ex3, _ex4,
+    query, query_type, types, organism, max_nodes,
+):
     """Search all databases and build network elements."""
+    triggered = ctx.triggered_id
+    if triggered == "url" and pathname not in ("/network", "/Network"):
+        return no_update, no_update
+
+    if isinstance(triggered, dict) and triggered.get("type") == "net-example":
+        idx = triggered.get("index", 0)
+        if 0 <= idx < len(EXAMPLE_QUERIES):
+            ex = EXAMPLE_QUERIES[idx]
+            query = ex["name"]
+            query_type = ex["type"]
+
+    if not query:
+        query = DEFAULT_QUERY["name"]
+        query_type = DEFAULT_QUERY["type"]
+
     if not query or len(query.strip()) < 2:
         return no_update, no_update
 

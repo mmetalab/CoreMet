@@ -84,6 +84,115 @@ _df_raw_placeholder = pd.DataFrame(columns=[
 
 _df_combined = None  # Cached MPI + MEI combined DataFrame
 
+
+_MISSING_TOKENS = {"", "nan", "none", "null", "<na>"}
+
+
+def _clean_series(series: pd.Series) -> pd.Series:
+    """Return a stripped string series with common missing tokens as empty strings."""
+    cleaned = series.astype("string").fillna("").str.strip()
+    return cleaned.mask(cleaned.str.lower().isin(_MISSING_TOKENS), "")
+
+
+def _valid_option_values(values):
+    """Clean a value collection and remove empty/missing sidebar options."""
+    cleaned = []
+    seen = set()
+    for value in values:
+        text = str(value).strip()
+        if text.lower() in _MISSING_TOKENS or not text or text == "-":
+            continue
+        if text not in seen:
+            cleaned.append(text)
+            seen.add(text)
+    return sorted(cleaned)
+
+
+def _fill_display_blanks(df: pd.DataFrame) -> pd.DataFrame:
+    """Replace remaining display blanks with a visible placeholder."""
+    df = df.copy()
+    for col in df.columns:
+        blank = _clean_series(df[col]).eq("")
+        df.loc[blank, col] = "-"
+    return df
+
+
+def _first_real_value_map(df: pd.DataFrame, key_col: str, value_col: str) -> dict:
+    """Map IDs to the first informative value, skipping blanks and ID placeholders."""
+    if key_col not in df.columns or value_col not in df.columns:
+        return {}
+    keys = _clean_series(df[key_col])
+    values = _clean_series(df[value_col])
+    valid = keys.ne("") & values.ne("") & ~values.str.casefold().eq(keys.str.casefold())
+    if not valid.any():
+        return {}
+    mapped = pd.DataFrame({"key": keys[valid], "value": values[valid]})
+    return mapped.drop_duplicates("key").set_index("key")["value"].to_dict()
+
+
+def _refine_combined_mpi(df: pd.DataFrame) -> pd.DataFrame:
+    """Fill display-critical MPI/MEI fields so Browse does not show empty cells."""
+    df = df.copy()
+    for col in [
+        "Species", "Metabolite Name", "HMDB ID", "Uniprot ID", "Protein Name",
+        "Gene Name", "Pathway_ID", "Pathway_Name", "Evidence_Source", "EC_Number",
+    ]:
+        if col in df.columns:
+            df[col] = _clean_series(df[col])
+
+    hmdb_to_name = _first_real_value_map(df, "HMDB ID", "Metabolite Name")
+    uniprot_to_protein = _first_real_value_map(df, "Uniprot ID", "Protein Name")
+    uniprot_to_gene = _first_real_value_map(df, "Uniprot ID", "Gene Name")
+
+    if hmdb_to_name:
+        hmdb = _clean_series(df["HMDB ID"])
+        met = _clean_series(df["Metabolite Name"])
+        needs_name = met.eq("") | (hmdb.ne("") & met.str.casefold().eq(hmdb.str.casefold()))
+        df.loc[needs_name, "Metabolite Name"] = hmdb[needs_name].map(hmdb_to_name).fillna(met[needs_name])
+
+    if uniprot_to_protein:
+        uniprot = _clean_series(df["Uniprot ID"])
+        protein = _clean_series(df["Protein Name"])
+        needs_name = protein.eq("") | (uniprot.ne("") & protein.str.casefold().eq(uniprot.str.casefold()))
+        df.loc[needs_name, "Protein Name"] = uniprot[needs_name].map(uniprot_to_protein).fillna(protein[needs_name])
+
+    if uniprot_to_gene:
+        gene = _clean_series(df["Gene Name"])
+        needs_gene = gene.eq("")
+        df.loc[needs_gene, "Gene Name"] = _clean_series(df.loc[needs_gene, "Uniprot ID"]).map(uniprot_to_gene).fillna("")
+
+    hmdb = _clean_series(df["HMDB ID"])
+    uniprot = _clean_series(df["Uniprot ID"])
+    ec_number = _clean_series(df["EC_Number"])
+
+    met = _clean_series(df["Metabolite Name"])
+    df.loc[met.eq("") & hmdb.ne(""), "Metabolite Name"] = "Metabolite name unavailable"
+    same_as_hmdb = hmdb.ne("") & _clean_series(df["Metabolite Name"]).str.casefold().eq(hmdb.str.casefold())
+    df.loc[same_as_hmdb, "Metabolite Name"] = "Metabolite name unavailable"
+    df.loc[met.eq("") & hmdb.eq(""), "Metabolite Name"] = "Unspecified metabolite"
+
+    protein = _clean_series(df["Protein Name"])
+    df.loc[protein.eq("") & ec_number.ne(""), "Protein Name"] = "Enzyme EC " + ec_number[protein.eq("") & ec_number.ne("")]
+    protein = _clean_series(df["Protein Name"])
+    df.loc[protein.eq("") & uniprot.ne(""), "Protein Name"] = "UniProt " + uniprot[protein.eq("") & uniprot.ne("")]
+    same_as_uniprot = uniprot.ne("") & _clean_series(df["Protein Name"]).str.casefold().eq(uniprot.str.casefold())
+    df.loc[same_as_uniprot, "Protein Name"] = "UniProt " + uniprot[same_as_uniprot]
+    df.loc[_clean_series(df["Protein Name"]).eq(""), "Protein Name"] = "Protein/enzyme unavailable"
+
+    fallback_cols = {
+        "Species": "Unspecified organism",
+        "Gene Name": "-",
+        "EC_Number": "-",
+        "Pathway_Name": "-",
+        "Evidence_Source": "Unspecified",
+    }
+    for col, fallback in fallback_cols.items():
+        blank = _clean_series(df[col]).eq("")
+        df.loc[blank, col] = fallback
+
+    return df
+
+
 def _get_combined_mpi():
     """Return a unified MPI + MEI DataFrame (enzymes presented as proteins)."""
     global _df_combined
@@ -118,7 +227,7 @@ def _get_combined_mpi():
     except Exception:
         pass
 
-    mpi = mpi.fillna("")
+    mpi = _refine_combined_mpi(mpi.fillna(""))
     # Pre-build search column
     mpi["_search_text"] = (
         mpi["Species"].str.lower() + " " +
@@ -147,8 +256,8 @@ def _ensure_filter_options():
     if _ALL_ORGANISMS:
         return
     df = _get_df()
-    _ALL_ORGANISMS = sorted(df["Species"].unique().tolist())
-    _ALL_SOURCES = sorted(df["Evidence_Source"].unique().tolist()) if "Evidence_Source" in df.columns else []
+    _ALL_ORGANISMS = _valid_option_values(df["Species"].unique()) if "Species" in df.columns else []
+    _ALL_SOURCES = _valid_option_values(df["Evidence_Source"].unique()) if "Evidence_Source" in df.columns else []
     pw_set = set()
     for pw in df["Pathway_Name"]:
         if pw:
@@ -204,7 +313,8 @@ def _make_organism_donut(df: pd.DataFrame, group_col: str = "Species") -> go.Fig
         else:
             return go.Figure()
     
-    counts = df[group_col].value_counts()
+    group_values = _clean_series(df[group_col]).replace("", "Unspecified")
+    counts = group_values.value_counts()
     labels = counts.index.tolist()
     values = counts.values.tolist()
     colors = [ORG_COLORS.get(lab, "#a0aec0") for lab in labels]
@@ -416,13 +526,13 @@ def _make_sidebar():
 def _make_table_section():
     """Global search bar, DataTable, pagination info, and CSV download."""
     # Provide initial data so the page is never visually empty
-    initial_df = _get_df().head(PAGE_SIZE)
+    initial_df = _get_combined_mpi().head(PAGE_SIZE)
     initial_display_cols = [
         "Species", "Metabolite Name", "HMDB ID", "Uniprot ID",
-        "Protein Name", "Gene Name", "Pathway_Name", "Evidence_Source",
+        "Protein Name", "Gene Name", "EC_Number", "Pathway_Name", "Evidence_Source",
     ]
     if not initial_df.empty:
-        initial_display = initial_df[initial_display_cols]
+        initial_display = _fill_display_blanks(initial_df[initial_display_cols])
         # We intentionally skip _add_markdown_links here to avoid import-time
         # NameError; markdown links are added in the callback for all updates.
         initial_records = initial_display.to_dict("records")
@@ -850,25 +960,30 @@ def _add_markdown_links(df: pd.DataFrame, interaction_type="mpi") -> pd.DataFram
         met_strs = df[met_col].astype(str)
         hmdb_strs = df[hmdb_col].astype(str) if hmdb_col in df.columns else pd.Series("", index=df.index)
         has_hmdb = hmdb_strs.str.len() > 0
+        has_hmdb &= ~hmdb_strs.str.lower().isin(_MISSING_TOKENS | {"-"})
         # With HMDB ID: link by id
         df.loc[has_hmdb, met_col] = (
             "[" + met_strs[has_hmdb] + "](/metabolite?id=" + hmdb_strs[has_hmdb] + ")"
         )
         # Without HMDB ID: link by name
-        no_hmdb = ~has_hmdb & (met_strs.str.len() > 0)
+        no_hmdb = ~has_hmdb & (met_strs.str.len() > 0) & ~met_strs.str.lower().isin(_MISSING_TOKENS | {"-"})
         df.loc[no_hmdb, met_col] = (
             "[" + met_strs[no_hmdb] + "](/metabolite?name=" + met_strs[no_hmdb] + ")"
         )
 
     if hmdb_col in df.columns:
-        hmdb_mask = df[hmdb_col].astype(str).str.len() > 0
+        hmdb_strs = df[hmdb_col].astype(str)
+        hmdb_mask = hmdb_strs.str.len() > 0
+        hmdb_mask &= ~hmdb_strs.str.lower().isin(_MISSING_TOKENS | {"-"})
         # Skip if already turned into metabolite link (would double-encode)
         hmdb_mask &= ~df[hmdb_col].astype(str).str.startswith("[")
         df.loc[hmdb_mask, hmdb_col] = (
             "[" + df.loc[hmdb_mask, hmdb_col] + "](https://hmdb.ca/metabolites/" + df.loc[hmdb_mask, hmdb_col] + ")"
         )
     if uni_col in df.columns:
-        uni_mask = df[uni_col].astype(str).str.len() > 0
+        uni_strs = df[uni_col].astype(str)
+        uni_mask = uni_strs.str.len() > 0
+        uni_mask &= ~uni_strs.str.lower().isin(_MISSING_TOKENS | {"-"})
         df.loc[uni_mask, uni_col] = (
             "[" + df.loc[uni_mask, uni_col] + "](https://www.uniprot.org/uniprot/" + df.loc[uni_mask, uni_col] + ")"
         )
@@ -1110,7 +1225,7 @@ def update_database_view(interaction_type, organisms, pathway, sources, search_t
 
     # Only select columns that exist
     display_cols = [c for c in display_cols if c in df_filtered.columns]
-    df_page = _add_markdown_links(df_filtered[display_cols].iloc[start:end], interaction_type)
+    df_page = _fill_display_blanks(_add_markdown_links(df_filtered[display_cols].iloc[start:end], interaction_type))
     table_records = df_page.to_dict("records")
 
     result_text = f"Showing {min(start + 1, len(df_filtered)):,}–{min(end, len(df_filtered)):,} of {len(df_filtered):,} {label} associations"
@@ -1243,47 +1358,47 @@ def update_sidebar_options(interaction_type):
 
     # Organisms: MDI uses Category, MMI uses Organism, MDrI uses Interaction_Type, mGWAS uses Chromosome, others use Species
     if interaction_type == "mmi" and "Organism" in df.columns:
-        orgs = sorted(df["Organism"].dropna().unique().tolist())
+        orgs = _valid_option_values(df["Organism"].unique())
     elif interaction_type == "mdri" and "Interaction_Type" in df.columns:
-        orgs = sorted(df["Interaction_Type"].dropna().unique().tolist())
+        orgs = _valid_option_values(df["Interaction_Type"].unique())
     elif interaction_type == "mgwas" and "Chromosome" in df.columns:
-        orgs = sorted(df["Chromosome"].dropna().unique().tolist(), key=lambda x: (int(x) if x.isdigit() else 99, x))
+        orgs = sorted(_valid_option_values(df["Chromosome"].unique()), key=lambda x: (int(x) if x.isdigit() else 99, x))
     elif interaction_type == "mgi" and "Organism" in df.columns:
-        orgs = sorted(df["Organism"].dropna().unique().tolist())
+        orgs = _valid_option_values(df["Organism"].unique())
     elif "Species" in df.columns:
-        orgs = sorted(df["Species"].unique().tolist())
+        orgs = _valid_option_values(df["Species"].unique())
     elif "Category" in df.columns:
-        orgs = sorted(df["Category"].unique().tolist())
+        orgs = _valid_option_values(df["Category"].unique())
     else:
         orgs = []
 
     # Evidence / Relationship filter: MMI uses Relationship_Type, MDrI uses Source, MDI/others use Evidence
     if interaction_type == "mmi" and "Relationship_Type" in df.columns:
-        sources = sorted(df["Relationship_Type"].dropna().unique().tolist())
+        sources = _valid_option_values(df["Relationship_Type"].unique())
     elif interaction_type == "mdri" and "Source" in df.columns:
-        sources = sorted(df["Source"].dropna().unique().tolist())
+        sources = _valid_option_values(df["Source"].unique())
     elif interaction_type == "mgwas" and "Source" in df.columns:
-        sources = sorted(df["Source"].dropna().unique().tolist())
+        sources = _valid_option_values(df["Source"].unique())
     elif interaction_type == "mgi" and "Source" in df.columns:
-        sources = sorted(df["Source"].dropna().unique().tolist())
+        sources = _valid_option_values(df["Source"].unique())
     elif "Evidence_Source" in df.columns:
-        sources = sorted(df["Evidence_Source"].unique().tolist())
+        sources = _valid_option_values(df["Evidence_Source"].unique())
     elif "Evidence_Level" in df.columns:
-        sources = sorted(df["Evidence_Level"].unique().tolist())
+        sources = _valid_option_values(df["Evidence_Level"].unique())
     else:
         sources = []
 
     # Pathways, Diseases, or Tissues
     if interaction_type == "mdi" and "Disease_Name" in df.columns:
-        pathways = sorted(df["Disease_Name"].unique().tolist())
+        pathways = _valid_option_values(df["Disease_Name"].unique())
     elif interaction_type == "mmi" and "Tissue" in df.columns:
-        pathways = sorted(df["Tissue"].dropna().unique().tolist())
+        pathways = _valid_option_values(df["Tissue"].unique())
     elif interaction_type == "mdri" and "Drug_Name" in df.columns:
-        pathways = sorted(df["Drug_Name"].dropna().unique().tolist())
+        pathways = _valid_option_values(df["Drug_Name"].unique())
     elif interaction_type == "mgwas" and "Mapped_Gene" in df.columns:
-        pathways = sorted(df["Mapped_Gene"].dropna().unique().tolist())
+        pathways = _valid_option_values(df["Mapped_Gene"].unique())
     elif interaction_type == "mgi" and "Gene_Symbol" in df.columns:
-        pathways = sorted(df["Gene_Symbol"].dropna().unique().tolist())
+        pathways = _valid_option_values(df["Gene_Symbol"].unique())
     else:
         pw_col = "Pathway_Name" if "Pathway_Name" in df.columns else "Pathway Name"
         pw_set = set()
@@ -1292,7 +1407,7 @@ def update_sidebar_options(interaction_type):
                 if pw:
                     for token in str(pw).split(";"):
                         token = token.strip()
-                        if token:
+                        if token and token != "-":
                             pw_set.add(token)
         pathways = sorted(pw_set)
 
