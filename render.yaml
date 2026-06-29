@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: coremet
+    runtime: python
+    plan: standard            # 2 GB RAM; database app uses ~1.5 GB at startup
+    region: oregon            # pick the region nearest your users
+    branch: main
+    buildCommand: pip install -r requirements.txt && python scripts/fetch_data.py
+    startCommand: gunicorn run:server -b 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 300 --max-requests 1000 --max-requests-jitter 50
+    healthCheckPath: /api/v1/health
+    autoDeploy: true
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: PYTHON_VERSION
+        value: 3.10.13
+      - key: CORMET_LAZY_MODELS
+        value: "true"         # lazy-load optional prediction models on first request
+      - key: DATA_BUNDLE_URL  # Zenodo direct link to coremet_runtime_core.zip (fetched at build)
+        sync: false           # set the value in the Render dashboard, not in git
+    # Notes:
+    #   Database app (browse/search/profile/network/download/API) needs ~1.5 GB -> Standard is fine.
+    #   The optional prediction (beta) models add ~1.2 GB; if enabled, use a 4 GB+ instance.
+    #   --workers 1 keeps memory bounded; threads handle concurrency.

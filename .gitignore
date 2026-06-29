@@ -1,0 +1,44 @@
+# Local settings folder in Visual Studio Code
+.vs/
+
+# Environment secrets
+.env
+
+# Checkpoints for notebooks
+*.ipynb_checkpoints/
+
+# Temp python files
+*__pycache__
+
+# Image files
+*.svg
+*.tif
+*.gif
+*.ppt
+*.pptx
+
+# ── Large data (host on Zenodo/Figshare; fetched at deploy time, not committed) ──
+# GitHub blocks files >100 MB; the full data/ tree is ~15 GB. Keep code in git,
+# fetch runtime data via scripts/fetch_data.py (see DEPLOY_RENDER.md).
+data/raw/
+data/cache/
+data/models/
+data/processed/
+data/databases/
+data/databases_v2/
+data/mpidatabase/
+data/mappings/
+data/case_studies/
+data/figures/
+data/*.json
+data/jobs.db
+*.pth
+*.pkl
+*.p
+
+# Keep these small, app-critical files tracked despite the broad rules above:
+!data/coremetdb_stats.json
+!.gitkeep
+# logs / scratch
+*.log
+performance.log

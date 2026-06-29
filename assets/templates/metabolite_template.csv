@@ -1,0 +1,4 @@
+Metabolite Name,HMDB ID,SMILES
+Glucose,HMDB0000122,OC[C@H]1OC(O)[C@H](O)[C@@H](O)[C@@H]1O
+Pyruvic acid,HMDB0000243,CC(=O)C(O)=O
+Lactic acid,HMDB0000190,C[C@@H](O)C(O)=O

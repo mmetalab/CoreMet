@@ -1,0 +1,65 @@
+/* CoreMet — Main CSS entry point
+   Imports all design system files in order.
+   Dash automatically loads files from assets/ alphabetically,
+   and css/ subfolder files are also auto-loaded.
+   This file provides overrides that layer on top. */
+
+/* The theme.css, components.css, and responsive.css in assets/css/
+   are auto-loaded by Dash. This file is kept for any page-specific
+   overrides that don't belong in the component library. */
+
+/* ── Global Arial font override for Dash DataTable ─────────── */
+.dash-spreadsheet,
+.dash-spreadsheet .dash-cell,
+.dash-spreadsheet .dash-header,
+.dash-spreadsheet td,
+.dash-spreadsheet th,
+.dash-table-container,
+.dash-table-container * {
+    font-family: Arial, Helvetica, sans-serif !important;
+}
+
+/* ── Fix markdown cell alignment in DataTable ──────────────── */
+/* Dash wraps markdown content in <p> tags with default margins,
+   causing row height / vertical alignment mismatches vs plain cells. */
+.dash-table-container .cell-markdown p,
+.dash-table-container .dash-cell-value p {
+    margin: 0 !important;
+    padding: 0 !important;
+    line-height: inherit !important;
+}
+
+/* Ensure markdown links match surrounding text style */
+.dash-table-container .cell-markdown a,
+.dash-table-container .dash-cell-value a {
+    text-decoration: none;
+    color: var(--cm-metabolite);
+}
+.dash-table-container .cell-markdown a:hover,
+.dash-table-container .dash-cell-value a:hover {
+    text-decoration: underline;
+    color: var(--cm-primary-hover);
+}
+
+/* Ensure consistent vertical alignment across all cells */
+.dash-table-container td {
+    vertical-align: middle !important;
+}
+
+/* Prevent markdown cells from adding extra height */
+.dash-table-container .dash-cell.column-type--text.cell-markdown {
+    line-height: 1.4 !important;
+}
+
+/* ── Cytoscape toolbar (Plotly modebar style) ─────────────── */
+.cyto-toolbar {
+    opacity: 0.35;
+    transition: opacity 0.2s ease;
+}
+.cyto-toolbar:hover {
+    opacity: 1;
+}
+.cyto-toolbar button:hover {
+    background: rgba(0, 0, 0, 0.06) !important;
+    color: var(--cm-text) !important;
+}

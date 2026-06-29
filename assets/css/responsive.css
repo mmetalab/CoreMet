@@ -1,0 +1,139 @@
+/* CoreMet — Responsive Breakpoints
+   768px (tablet), 1024px (desktop), 1400px (wide)
+   ========================================================================= */
+
+/* ── Tablet and below (max-width: 768px) ─────────────────────── */
+
+@media (max-width: 768px) {
+    body {
+        padding-top: 56px;
+    }
+
+    .cm-navbar {
+        height: 56px;
+        padding: 0 var(--space-md);
+    }
+
+    .cm-page-container {
+        padding: var(--space-md);
+    }
+
+    .cm-hero {
+        padding: var(--space-xl) var(--space-md);
+    }
+
+    .cm-hero h1 {
+        font-size: var(--text-2xl);
+    }
+
+    .cm-hero p {
+        font-size: var(--text-base);
+    }
+
+    .cm-hero .hero-buttons {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .cm-page-header .page-title {
+        font-size: var(--text-xl);
+    }
+
+    .cm-stat-card {
+        padding: var(--space-md);
+    }
+
+    .cm-stat-card .stat-value {
+        font-size: var(--text-xl);
+    }
+
+    .cm-stepper {
+        flex-direction: column;
+        gap: var(--space-sm);
+    }
+
+    .cm-stepper-connector {
+        width: 2px;
+        height: 24px;
+        max-width: none;
+    }
+
+    /* Sidebar becomes full-width on mobile */
+    .cm-sidebar {
+        width: 100% !important;
+        min-width: 100% !important;
+        max-height: none !important;
+        border-right: none !important;
+        border-bottom: 1px solid var(--cm-border) !important;
+        border-radius: var(--radius-lg) var(--radius-lg) 0 0 !important;
+        margin-bottom: var(--space-lg);
+    }
+
+    .cm-toast {
+        left: var(--space-md);
+        right: var(--space-md);
+        bottom: var(--space-md);
+        min-width: auto;
+    }
+
+    .cm-feature-card {
+        padding: var(--space-lg);
+    }
+}
+
+
+/* ── Small desktop (max-width: 1024px) ───────────────────────── */
+
+@media (max-width: 1024px) {
+    .cm-page-container {
+        max-width: 100%;
+        padding: var(--space-md) var(--space-lg);
+    }
+
+    .cm-sidebar {
+        width: 240px !important;
+        min-width: 240px !important;
+    }
+}
+
+
+/* ── Standard desktop (min-width: 1024px) ────────────────────── */
+
+@media (min-width: 1024px) {
+    .cm-page-container {
+        max-width: 1400px;
+    }
+}
+
+
+/* ── Wide screens (min-width: 1400px) ────────────────────────── */
+
+@media (min-width: 1400px) {
+    .cm-page-container {
+        max-width: 1400px;
+        padding: var(--space-lg) var(--space-xl);
+    }
+}
+
+
+/* ── Print ────────────────────────────────────────────────────── */
+
+@media print {
+    .cm-navbar,
+    .cm-footer,
+    .cm-toast {
+        display: none !important;
+    }
+
+    body {
+        padding-top: 0;
+        background: white;
+    }
+
+    .cm-card,
+    .cm-stat-card,
+    .cm-feature-card {
+        box-shadow: none;
+        border: 1px solid #ddd;
+    }
+}
