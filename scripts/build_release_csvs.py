@@ -36,8 +36,47 @@ SRC = {
 OUTNAME = {"MPI": "mpi", "MEI": "mei", "MMI": "mmi", "MDI": "mdi",
            "MDrI": "mdri", "MGI": "mgi", "mGWAS": "mgwas"}
 
+# Empty entity-name fields to backfill so every browsed record shows a name.
+# (name_col, id_col, kind): kind "met" resolves the HMDB id to a metabolite name
+# via the entity registry (real name), falling back to the id; "id" uses the id column.
+NAME_FILL = {
+    "MPI":  [("Metabolite Name", "HMDB ID", "met"), ("Protein Name", "Uniprot ID", "id")],
+    "MEI":  [("Metabolite_Name", "HMDB_ID", "met"), ("Enzyme_Name", "Uniprot_ID", "id")],
+}
+
+
+def _hmdb2name() -> dict:
+    """HMDB id -> metabolite name, from the CoreMet entity registry."""
+    try:
+        reg = json.loads((DATA / "coremetdb_entity_registry.json").read_text())
+    except Exception:
+        return {}
+    out = {}
+    for _id, info in reg.get("reverse", {}).items():
+        if info.get("type") == "metabolite":
+            hmdb = (info.get("external_ids") or {}).get("hmdb_id")
+            if hmdb and info.get("name"):
+                out[hmdb] = info["name"]
+    return out
+
+
+def _backfill_names(name: str, df, h2n: dict):
+    for name_col, id_col, kind in NAME_FILL.get(name, []):
+        if name_col not in df.columns or id_col not in df.columns:
+            continue
+        empty = df[name_col].isna() | (df[name_col].astype(str).str.strip() == "")
+        if not empty.any():
+            continue
+        ids = df.loc[empty, id_col].astype(str)
+        if kind == "met":
+            df.loc[empty, name_col] = ids.map(lambda h: h2n.get(h, h))
+        else:
+            df.loc[empty, name_col] = ids
+    return df
+
 
 def main() -> None:
+    h2n = _hmdb2name()
     for name, (path, keys, process) in SRC.items():
         out = REL / f"coremetdb_{OUTNAME[name]}.csv"
         target = STATS["databases"][name]["interactions"]
@@ -55,6 +94,7 @@ def main() -> None:
             _no_src = df["Evidence_Source"].isna() | (df["Evidence_Source"].astype(str).str.strip() == "")
             df.loc[_no_src, "Evidence_Source"] = "Rhea"
         df = df.drop_duplicates(subset=keys)
+        df = _backfill_names(name, df, h2n)
         df.to_csv(out, index=False)
         flag = "OK" if len(df) == target else "MISMATCH!"
         print(f"{name:6s} curated/deduped   -> {len(df):>9,} rows  (target {target:,})  {flag}")

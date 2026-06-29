@@ -42,3 +42,6 @@ data/jobs.db
 # logs / scratch
 *.log
 performance.log
+
+.DS_Store
+**/.DS_Store

@@ -63,7 +63,12 @@ class Config:
     
     @property
     def MPI_DB_PATH(self) -> Path:
-        """Get MPI database path, prefer v3 > v2 > original"""
+        """Get MPI database path. Prefer the curated, backfilled release file (the same
+        38,061-edge table the browse modules and manuscript use) so the API, data_service,
+        and sitemap all serve identical, fully-annotated MPI records; then v3 > v2 > original."""
+        release_path = self._data_dir / "databases" / "release" / "coremetdb_mpi.csv"
+        if release_path.exists():
+            return self._get_cached_path("mpi_db_release", release_path)
         v3_path = self.DATABASE_DIR / "MPIDB_v3.csv"
         if v3_path.exists():
             return self._get_cached_path("mpi_db_v3", v3_path)
