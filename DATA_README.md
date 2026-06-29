@@ -4,7 +4,7 @@ A metabolite-centered cross-domain interaction knowledge graph. This deposit con
 the curated, deduplicated interaction tables underlying the CoreMet web resource.
 Record counts match exactly those reported in the manuscript and on the website.
 
-**License:** CC BY 4.0 · **Web resource:** [URL] · **Code:** [GitHub URL]
+**License:** CC BY 4.0 · **Web resource:** https://www.coremet.org · **Code:** [GitHub URL]
 
 ## Contents
 
@@ -51,4 +51,4 @@ edge key within each layer; MPI is restricted to directly-evidenced interactions
 ## How to cite
 
 A formal citation will be provided once the accompanying manuscript is published
-(in preparation, 2026). Please cite this dataset by its DOI and link to [URL].
+(in preparation, 2026). Please cite this dataset by its DOI and link to https://www.coremet.org.

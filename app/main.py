@@ -43,8 +43,8 @@ def create_app(config_name='default'):
     <head>
         {%metas%}
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta property="og:title" content="CoreMet — Metabolite Interaction Database" />
-        <meta property="og:description" content="Explore 1.95M+ curated metabolite interactions across seven layers (MPI, MEI, MDI, MMI, MDrI, MGI, mGWAS) — proteins, enzymes, diseases, microbes, drugs, genes, and SNPs." />
+        <meta property="og:title" content="CoreMet: Metabolite Interaction Database" />
+        <meta property="og:description" content="Explore 1.95M+ curated metabolite interactions across seven layers (MPI, MEI, MDI, MMI, MDrI, MGI, mGWAS), proteins, enzymes, diseases, microbes, drugs, genes, and SNPs." />
 
         <meta property="og:type" content="website" />
         <meta property="og:site_name" content="CoreMet" />
@@ -102,7 +102,7 @@ def create_app(config_name='default'):
         _module_layouts[f'/{key}/browse'] = _module_layouts[f'/{key}']
         _module_layouts[f'/{key}/predict'] = create_predict_layout(cfg)
         register_module_callbacks(app, cfg, loader)
-    # Store module layouts — update the existing dict (mutable, shared ref)
+    # Store module layouts, update the existing dict (mutable, shared ref)
     _MODULE_LAYOUTS.update(_module_layouts)
 
     # ── Build CoreMet ID registry ────────────────────────────
@@ -112,7 +112,7 @@ def create_app(config_name='default'):
     except Exception as e:
         logger.warning("Failed to build entity registry: %s", e)
 
-    # Main layout — navbar and footer are OUTSIDE the page-swapped area
+    # Main layout, navbar and footer are OUTSIDE the page-swapped area
     app.layout = html.Div([
         dcc.Location(id='url', refresh=False),
         dcc.Location(id='global-search-redirect', refresh=True),
@@ -135,7 +135,7 @@ def create_app(config_name='default'):
     except Exception as e:
         logger.warning(f"API blueprint not registered: {e}")
 
-    # SEO routes — sitemap.xml and robots.txt
+    # SEO routes, sitemap.xml and robots.txt
     _register_seo_routes(app.server)
 
     register_callbacks(app)
@@ -152,7 +152,7 @@ def _register_seo_routes(server):
     """Add /sitemap.xml and /robots.txt to the Flask server."""
     from flask import Response
 
-    BASE_URL = "https://cormet.org"  # Update when domain is live
+    BASE_URL = "https://www.coremet.org"  # live custom domain
 
     STATIC_PAGES = [
         "/home", "/database", "/predict", "/disease", "/enrichment",
@@ -175,7 +175,7 @@ def _register_seo_routes(server):
         for page in STATIC_PAGES:
             urls.append(f"  <url><loc>{BASE_URL}{page}</loc><priority>0.8</priority></url>")
 
-        # Metabolite detail pages — unique HMDB IDs from MPI
+        # Metabolite detail pages, unique HMDB IDs from MPI
         try:
             from app.config import Config
             import pandas as pd
@@ -196,7 +196,7 @@ def _register_seo_routes(server):
 
 
 def register_callbacks(app):
-    """Register application callbacks — including shared navbar/cite callbacks"""
+    """Register application callbacks, including shared navbar/cite callbacks"""
 
     # ── Page routing ──────────────────────────────────────────
     @app.callback(

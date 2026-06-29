@@ -48,7 +48,7 @@ class Config:
     
     @property
     def DATABASE_DIR(self) -> Path:
-        """Get database directory — check both data/mpidatabase and data/raw/mpidatabase"""
+        """Get database directory, check both data/mpidatabase and data/raw/mpidatabase"""
         primary = self._data_dir / "mpidatabase"
         fallback = self._data_dir / "raw" / "mpidatabase"
         # Prefer the directory that has MPIDB files
@@ -63,7 +63,7 @@ class Config:
     
     @property
     def MPI_DB_PATH(self) -> Path:
-        """Get MPI database path — prefer v3 > v2 > original"""
+        """Get MPI database path, prefer v3 > v2 > original"""
         v3_path = self.DATABASE_DIR / "MPIDB_v3.csv"
         if v3_path.exists():
             return self._get_cached_path("mpi_db_v3", v3_path)
@@ -99,7 +99,7 @@ class Config:
     
     @property
     def MPI_MODEL_PATH(self) -> Path:
-        """Get MPI model path — prefer v2 if available"""
+        """Get MPI model path, prefer v2 if available"""
         v2_path = self.MODELS_DIR / "all_mpi_model_v2.pth"
         if v2_path.exists():
             return self._get_cached_path("mpi_model_v2", v2_path)
@@ -107,7 +107,7 @@ class Config:
 
     @property
     def MPI_PREDICTOR_PATH(self) -> Path:
-        """Get MPI predictor path — prefer v2 if available"""
+        """Get MPI predictor path, prefer v2 if available"""
         v2_path = self.MODELS_DIR / "all_mpi_model_pred_v2.pth"
         if v2_path.exists():
             return self._get_cached_path("mpi_predictor_v2", v2_path)
