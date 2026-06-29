@@ -8,10 +8,13 @@ species listing, and job result retrieval.
 import io
 import json
 import logging
+import tempfile
+import zipfile
+from pathlib import Path
 from threading import Thread
 
 import pandas as pd
-from flask import Blueprint, Response, jsonify, request
+from flask import Blueprint, Response, after_this_request, jsonify, request, send_file
 
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -54,6 +57,48 @@ def _get_data_service() -> DataService:
     if _data_service is None:
         _data_service = DataService()
     return _data_service
+
+
+def _data_dir() -> Path:
+    return _get_config().DATA_DIR
+
+
+def _release_dir() -> Path:
+    return _data_dir() / "databases" / "release"
+
+
+_DOWNLOAD_FILES = {
+    "mpi": "coremetdb_mpi.csv",
+    "mei": "coremetdb_mei.csv",
+    "mdi": "coremetdb_mdi.csv",
+    "mmi": "coremetdb_mmi.csv",
+    "mdri": "coremetdb_mdri.csv",
+    "mgi": "coremetdb_mgi.csv",
+    "mgwas": "coremetdb_mgwas.csv",
+}
+
+
+def _send_existing_file(path: Path, download_name: str, mimetype: str):
+    if not path.exists():
+        return jsonify({"error": f"{download_name} is not available on this deployment"}), 404
+    return send_file(path, as_attachment=True, download_name=download_name, mimetype=mimetype)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/health and /api/v1/stats
+# ---------------------------------------------------------------------------
+
+@api_bp.route("/stats", methods=["GET"])
+@limiter.limit("100 per hour")
+def stats():
+    """Return canonical CoreMet database statistics."""
+    stats_path = _data_dir() / "coremetdb_stats.json"
+    if not stats_path.exists():
+        return jsonify({"error": "Database statistics are not available"}), 404
+    try:
+        return jsonify(json.loads(stats_path.read_text())), 200
+    except json.JSONDecodeError:
+        return jsonify({"error": "Database statistics file is invalid"}), 500
 
 
 # ---------------------------------------------------------------------------
@@ -826,6 +871,75 @@ def autocomplete():
     scored.sort(key=lambda x: x[0])
     results = [s[1] for s in scored[:limit]]
     return jsonify(results), 200
+
+
+# ---------------------------------------------------------------------------
+# Dataset downloads
+# ---------------------------------------------------------------------------
+
+@api_bp.route("/download/<dataset>", methods=["GET"])
+@limiter.limit("30 per hour")
+def download_dataset(dataset):
+    """Download release CSVs and lightweight metadata files."""
+    dataset = dataset.strip().lower()
+
+    if dataset in _DOWNLOAD_FILES:
+        filename = _DOWNLOAD_FILES[dataset]
+        return _send_existing_file(_release_dir() / filename, filename, "text/csv")
+
+    if dataset == "node-metadata":
+        return _send_existing_file(
+            _data_dir() / "coremetdb_entity_registry.json",
+            "coremetdb_entity_registry.json",
+            "application/json",
+        )
+
+    if dataset == "schema":
+        schema_path = _get_config().BASE_DIR / "DATA_README.md"
+        return _send_existing_file(schema_path, "CoreMet_DATA_README.md", "text/markdown")
+
+    if dataset in {"full-edges", "full", "all"}:
+        missing = [
+            filename for filename in _DOWNLOAD_FILES.values()
+            if not (_release_dir() / filename).exists()
+        ]
+        if missing:
+            return jsonify({
+                "error": "Full database release is not available on this deployment",
+                "missing": missing,
+            }), 404
+
+        tmp = tempfile.NamedTemporaryFile(prefix="coremetdb_release_", suffix=".zip", delete=False)
+        tmp_path = Path(tmp.name)
+        tmp.close()
+        with zipfile.ZipFile(tmp_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            for filename in _DOWNLOAD_FILES.values():
+                archive.write(_release_dir() / filename, arcname=f"CoreMet-DB_v1/{filename}")
+            stats_path = _data_dir() / "coremetdb_stats.json"
+            if stats_path.exists():
+                archive.write(stats_path, arcname="CoreMet-DB_v1/coremetdb_stats.json")
+            readme_path = _get_config().BASE_DIR / "DATA_README.md"
+            if readme_path.exists():
+                archive.write(readme_path, arcname="CoreMet-DB_v1/DATA_README.md")
+
+        @after_this_request
+        def cleanup(response):
+            tmp_path.unlink(missing_ok=True)
+            return response
+
+        return send_file(
+            tmp_path,
+            as_attachment=True,
+            download_name="CoreMet-DB_v1_release.zip",
+            mimetype="application/zip",
+        )
+
+    if dataset in {"embeddings", "model"}:
+        return jsonify({
+            "error": f"{dataset} is an optional machine-learning resource and is not bundled with the database deployment"
+        }), 404
+
+    return jsonify({"error": f"Unknown dataset '{dataset}'"}), 404
 
 
 # ---------------------------------------------------------------------------

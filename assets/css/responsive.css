@@ -69,6 +69,12 @@
         margin-bottom: var(--space-lg);
     }
 
+    .net-sidebar {
+        position: static !important;
+        max-height: none !important;
+        overflow: visible !important;
+    }
+
     .cm-toast {
         left: var(--space-md);
         right: var(--space-md);

@@ -518,7 +518,7 @@ page_content = html.Div(
                                     # Stats panel
                                     html.Div(id="net-stats-panel"),
                                 ],
-                                className="cm-card",
+                                className="cm-card net-sidebar",
                                 style={
                                     "position": "sticky", "top": "80px",
                                     "maxHeight": "calc(100vh - 100px)",

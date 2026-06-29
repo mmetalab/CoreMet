@@ -33,7 +33,7 @@ class DataService:
             
             # Load MPI database
             if self.config.MPI_DB_PATH.exists():
-                self.mpi_db = pd.read_csv(self.config.MPI_DB_PATH)
+                self.mpi_db = pd.read_csv(self.config.MPI_DB_PATH, low_memory=False)
             
             logger.info("Databases loaded successfully")
 

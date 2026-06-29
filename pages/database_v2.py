@@ -49,7 +49,7 @@ def _get_df():
     try:
         from pathlib import Path as _P
         _rel = _P(__file__).parent.parent / "data" / "databases" / "release" / "coremetdb_mpi.csv"
-        _df_raw = pd.read_csv(_rel if _rel.exists() else _cfg.MPI_DB_PATH)
+        _df_raw = pd.read_csv(_rel if _rel.exists() else _cfg.MPI_DB_PATH, low_memory=False)
     except FileNotFoundError:
         _df_raw = pd.DataFrame(columns=[
             "Species", "Metabolite Name", "HMDB ID", "SMILES",

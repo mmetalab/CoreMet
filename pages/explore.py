@@ -13,6 +13,8 @@ Routes:
   /explore/snps            , browse unique SNPs
 """
 
+import math
+from functools import lru_cache
 from urllib.parse import quote_plus
 
 from dash import html, dcc, dash_table, Input, Output, State, callback, no_update
@@ -227,45 +229,94 @@ page_content = layout
 # Dynamic entity browse pages  (called from display_page in main.py)
 # ═══════════════════════════════════════════════════════════════════════
 
+def _clean_text(value) -> str:
+    """Normalize empty pandas values for display."""
+    if value is None:
+        return ""
+    try:
+        if pd.isna(value):
+            return ""
+    except (TypeError, ValueError):
+        pass
+    text = str(value).strip()
+    if text.lower() in {"", "nan", "none", "null", "<na>"}:
+        return ""
+    return text
+
+
+@lru_cache(maxsize=8)
 def _get_entity_list(entity_key: str) -> pd.DataFrame:
     """Return a DataFrame with columns [Name, ID, Interactions] for a given entity type."""
     rows = []
 
     if entity_key == "metabolites":
+        by_hmdb = {}
+
+        def _add_metabolites(df, hmdb_col, name_col):
+            if df.empty or hmdb_col not in df.columns:
+                return
+            for hmdb, g in df.groupby(hmdb_col, observed=False):
+                hmdb = _clean_text(hmdb)
+                if not hmdb.startswith("HMDB"):
+                    continue
+                name = ""
+                if name_col in g.columns:
+                    names = [_clean_text(v) for v in g[name_col].dropna().unique()]
+                    name = next((v for v in names if v), "")
+                current = by_hmdb.setdefault(hmdb, {"Name": name, "ID": hmdb, "Interactions": 0})
+                if not current["Name"] and name:
+                    current["Name"] = name
+                current["Interactions"] += len(g)
+
         try:
             from pages.metabolite_detail import _get_mpi_db
-            mpi = _get_mpi_db()
-            if not mpi.empty:
-                for _, g in mpi.groupby("HMDB ID"):
-                    r = g.iloc[0]
-                    rows.append({"Name": str(r.get("Metabolite Name", "")),
-                                 "ID": str(r.get("HMDB ID", "")),
-                                 "Interactions": len(g)})
+            _add_metabolites(_get_mpi_db(), "HMDB ID", "Metabolite Name")
+        except Exception:
+            pass
+        try:
+            from app.services.mei_service import get_mei_db
+            _add_metabolites(get_mei_db(), "HMDB_ID", "Metabolite_Name")
         except Exception:
             pass
         try:
             from app.services.mdi_service import get_mdi_db
-            mdi = get_mdi_db()
-            if not mdi.empty and "HMDB_ID" in mdi.columns:
-                for hmdb, g in mdi.groupby("HMDB_ID"):
-                    if any(r.get("ID") == hmdb for r in rows):
-                        continue
-                    r = g.iloc[0]
-                    rows.append({"Name": str(r.get("Metabolite_Name", "")),
-                                 "ID": str(hmdb), "Interactions": len(g)})
+            _add_metabolites(get_mdi_db(), "HMDB_ID", "Metabolite_Name")
         except Exception:
             pass
+        try:
+            from app.services.mmi_service import get_mmi_db
+            _add_metabolites(get_mmi_db(), "HMDB_ID", "Metabolite_Name")
+        except Exception:
+            pass
+        try:
+            from app.services.mdri_service import get_mdri_db
+            _add_metabolites(get_mdri_db(), "HMDB_ID", "Metabolite_Name")
+        except Exception:
+            pass
+        try:
+            from app.services.mgi_service import get_mgi_db
+            _add_metabolites(get_mgi_db(), "HMDB_ID", "Metabolite_Name")
+        except Exception:
+            pass
+        try:
+            from app.services.mgwas_service import get_mgwas_db
+            _add_metabolites(get_mgwas_db(), "HMDB_ID", "Metabolite_Name")
+        except Exception:
+            pass
+
+        rows = list(by_hmdb.values())
 
     elif entity_key == "proteins":
         try:
             from pages.metabolite_detail import _get_mpi_db
             mpi = _get_mpi_db()
             if not mpi.empty and "Protein Name" in mpi.columns:
-                for name, g in mpi.groupby("Protein Name"):
-                    if not str(name).strip():
+                for name, g in mpi.groupby("Protein Name", observed=False):
+                    name = _clean_text(name)
+                    if not name:
                         continue
-                    uid = str(g.iloc[0].get("Uniprot ID", ""))
-                    rows.append({"Name": str(name), "ID": uid, "Interactions": len(g)})
+                    uid = _clean_text(g.iloc[0].get("Uniprot ID", ""))
+                    rows.append({"Name": name, "ID": uid, "Interactions": len(g)})
         except Exception:
             pass
 
@@ -274,9 +325,12 @@ def _get_entity_list(entity_key: str) -> pd.DataFrame:
             from app.services.mgi_service import get_mgi_db
             df = get_mgi_db()
             if not df.empty and "Gene_Symbol" in df.columns:
-                for name, g in df.groupby("Gene_Symbol"):
-                    gid = str(g.iloc[0].get("Gene_ID", ""))
-                    rows.append({"Name": str(name), "ID": gid, "Interactions": len(g)})
+                for name, g in df.groupby("Gene_Symbol", observed=False):
+                    name = _clean_text(name)
+                    if not name:
+                        continue
+                    gid = _clean_text(g.iloc[0].get("Gene_ID", ""))
+                    rows.append({"Name": name, "ID": gid, "Interactions": len(g)})
         except Exception:
             pass
 
@@ -285,9 +339,12 @@ def _get_entity_list(entity_key: str) -> pd.DataFrame:
             from app.services.mdi_service import get_mdi_db
             df = get_mdi_db()
             if not df.empty and "Disease_Name" in df.columns:
-                for name, g in df.groupby("Disease_Name"):
-                    did = str(g.iloc[0].get("Disease_ID", g.iloc[0].get("MeSH_ID", "")))
-                    rows.append({"Name": str(name), "ID": did, "Interactions": len(g)})
+                for name, g in df.groupby("Disease_Name", observed=False):
+                    name = _clean_text(name)
+                    if not name:
+                        continue
+                    did = _clean_text(g.iloc[0].get("Disease_ID", g.iloc[0].get("MeSH_ID", "")))
+                    rows.append({"Name": name, "ID": did, "Interactions": len(g)})
         except Exception:
             pass
 
@@ -296,9 +353,12 @@ def _get_entity_list(entity_key: str) -> pd.DataFrame:
             from app.services.mmi_service import get_mmi_db
             df = get_mmi_db()
             if not df.empty and "Microbe_Name" in df.columns:
-                for name, g in df.groupby("Microbe_Name"):
-                    tid = str(g.iloc[0].get("Taxonomy_ID", ""))
-                    rows.append({"Name": str(name), "ID": tid, "Interactions": len(g)})
+                for name, g in df.groupby("Microbe_Name", observed=False):
+                    name = _clean_text(name)
+                    if not name:
+                        continue
+                    tid = _clean_text(g.iloc[0].get("Taxonomy_ID", ""))
+                    rows.append({"Name": name, "ID": tid, "Interactions": len(g)})
         except Exception:
             pass
 
@@ -307,9 +367,12 @@ def _get_entity_list(entity_key: str) -> pd.DataFrame:
             from app.services.mdri_service import get_mdri_db
             df = get_mdri_db()
             if not df.empty and "Drug_Name" in df.columns:
-                for name, g in df.groupby("Drug_Name"):
-                    dbid = str(g.iloc[0].get("DrugBank_ID", ""))
-                    rows.append({"Name": str(name), "ID": dbid, "Interactions": len(g)})
+                for name, g in df.groupby("Drug_Name", observed=False):
+                    name = _clean_text(name)
+                    if not name:
+                        continue
+                    dbid = _clean_text(g.iloc[0].get("DrugBank_ID", ""))
+                    rows.append({"Name": name, "ID": dbid, "Interactions": len(g)})
         except Exception:
             pass
 
@@ -318,12 +381,21 @@ def _get_entity_list(entity_key: str) -> pd.DataFrame:
             from app.services.mgwas_service import get_mgwas_db
             df = get_mgwas_db()
             if not df.empty and "rsID" in df.columns:
-                for name, g in df.groupby("rsID"):
-                    rows.append({"Name": str(name), "ID": str(name), "Interactions": len(g)})
+                for name, g in df.groupby("rsID", observed=False):
+                    name = _clean_text(name)
+                    if not name:
+                        continue
+                    rows.append({"Name": name, "ID": name, "Interactions": len(g)})
         except Exception:
             pass
 
     result = pd.DataFrame(rows) if rows else pd.DataFrame(columns=["Name", "ID", "Interactions"])
+    if not result.empty:
+        result["Name"] = result["Name"].map(_clean_text)
+        result["ID"] = result["ID"].map(_clean_text).replace("", "-")
+        result = result[result["Name"] != ""]
+        if entity_key == "metabolites":
+            result = result[result["ID"].str.startswith("HMDB", na=False)]
     return result.sort_values("Interactions", ascending=False).reset_index(drop=True)
 
 
@@ -333,17 +405,7 @@ def build_entity_browse_page(entity_key: str) -> html.Div:
     if not cfg:
         return html.Div("Unknown entity type.", className="text-center text-muted p-5")
 
-    df = _get_entity_list(entity_key)
     color = cfg["color"]
-    detail_route = cfg["detail_route"]
-    id_param = cfg["id_param"]
-
-    # Build linked name column, markdown links to entity detail pages
-    if not df.empty:
-        df["Name"] = df.apply(
-            lambda r: f"[{r['Name']}]({detail_route}?{id_param}={quote_plus(str(r['ID'] if entity_key == 'metabolites' else r['Name']))})",
-            axis=1,
-        )
 
     return html.Div([
         html.Div([
@@ -357,27 +419,46 @@ def build_entity_browse_page(entity_key: str) -> html.Div:
             html.Div([
                 html.Div([
                     html.I(className=f"{cfg['icon']} me-2", style={"color": color, "fontSize": "1.1rem"}),
-                    html.Span(f"{len(df):,}", style={"fontSize": "1.5rem", "fontWeight": "700", "color": color}),
+                    html.Span(id="explore-entity-total", style={
+                        "fontSize": "1.5rem", "fontWeight": "700", "color": color,
+                    }),
                     html.Span(f"  unique {cfg['label'].lower()} in CoreMet",
                               style={"fontSize": "0.9rem", "color": "#718096", "marginLeft": "8px"}),
                 ], style={"display": "flex", "alignItems": "center"}),
             ], className="cm-card mb-4", style={"padding": "16px"}),
 
+            dbc.InputGroup(
+                [
+                    dbc.InputGroupText(html.I(className="fas fa-search")),
+                    dbc.Input(
+                        id="explore-entity-search",
+                        type="text",
+                        debounce=True,
+                        placeholder=f"Search {cfg['label'].lower()}...",
+                    ),
+                ],
+                className="mb-3",
+            ),
+
+            html.Div(id="explore-entity-result-count", className="mb-2", style={
+                "fontSize": "0.85rem", "color": "var(--cm-text-secondary)",
+            }),
+
             # Data table
             dash_table.DataTable(
-                id=f"explore-{entity_key}-table",
-                data=df.to_dict("records") if not df.empty else [],
+                id="explore-entity-table",
+                data=[],
                 columns=[
                     {"name": "Name", "id": "Name", "type": "text", "presentation": "markdown"},
                     {"name": "ID", "id": "ID"},
                     {"name": "Interactions", "id": "Interactions"},
                 ],
                 page_size=25,
-                page_action="native",
-                sort_action="native",
+                page_action="custom",
+                page_current=0,
+                sort_action="custom",
                 sort_mode="single",
-                filter_action="native",
-                style_table={"overflowX": "auto"},
+                style_table={"overflowX": "auto", "border": "1px solid #e2e8f0", "borderRadius": "8px"},
                 style_header={
                     "backgroundColor": color, "color": "white",
                     "fontWeight": "600", "fontSize": "0.8rem", "padding": "8px 12px",
@@ -390,5 +471,70 @@ def build_entity_browse_page(entity_key: str) -> html.Div:
                     {"if": {"row_index": "odd"}, "backgroundColor": "#fafbfc"},
                 ],
             ),
+            dcc.Store(id="explore-entity-key", data=entity_key),
         ], className="cm-page-container"),
     ])
+
+
+@callback(
+    Output("explore-entity-table", "data"),
+    Output("explore-entity-table", "page_count"),
+    Output("explore-entity-table", "page_current"),
+    Output("explore-entity-total", "children"),
+    Output("explore-entity-result-count", "children"),
+    Input("explore-entity-key", "data"),
+    Input("explore-entity-search", "value"),
+    Input("explore-entity-table", "page_current"),
+    Input("explore-entity-table", "page_size"),
+    Input("explore-entity-table", "sort_by"),
+)
+def update_entity_browse_table(entity_key, search_text, page_current, page_size, sort_by):
+    """Serve one clean page of entity browse records at a time."""
+    if not entity_key:
+        return [], 0, 0, "", ""
+
+    df = _get_entity_list(entity_key).copy()
+    total = len(df)
+
+    if search_text:
+        q = search_text.strip().lower()
+        if q:
+            mask = (
+                df["Name"].astype(str).str.lower().str.contains(q, na=False, regex=False) |
+                df["ID"].astype(str).str.lower().str.contains(q, na=False, regex=False)
+            )
+            df = df[mask]
+
+    if sort_by:
+        for sort in reversed(sort_by):
+            col = sort.get("column_id")
+            if col in df.columns:
+                df = df.sort_values(col, ascending=sort.get("direction") == "asc")
+    else:
+        df = df.sort_values("Interactions", ascending=False)
+
+    page_size = page_size or 25
+    page_count = max(1, math.ceil(len(df) / page_size)) if len(df) else 0
+    page_current = min(page_current or 0, max(page_count - 1, 0))
+    start = page_current * page_size
+    page_df = df.iloc[start:start + page_size].copy()
+
+    cfg = ENTITY_BROWSE_CONFIG.get(entity_key, {})
+    detail_route = cfg.get("detail_route", "/search")
+    id_param = cfg.get("id_param", "q")
+    if not page_df.empty:
+        page_df["Name"] = page_df.apply(
+            lambda r: (
+                f"[{r['Name']}]({detail_route}?{id_param}="
+                f"{quote_plus(str(r['ID'] if entity_key == 'metabolites' and r['ID'] != '-' else r['Name']))})"
+            ),
+            axis=1,
+        )
+
+    visible = len(df)
+    if visible:
+        result_text = f"Showing {start + 1:,}-{min(start + page_size, visible):,} of {visible:,} records"
+    else:
+        result_text = "No matching records"
+
+    return page_df.to_dict("records"), page_count, page_current, f"{total:,}", result_text

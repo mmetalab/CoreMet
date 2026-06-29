@@ -75,6 +75,36 @@
     color: var(--cm-text-on-dark) !important;
 }
 
+@media (max-width: 991.98px) {
+    .cm-navbar .container-fluid {
+        position: relative;
+    }
+
+    .cm-navbar .navbar-collapse {
+        position: absolute;
+        top: 56px;
+        left: calc(-1 * var(--space-md));
+        right: calc(-1 * var(--space-md));
+        background: var(--cm-primary);
+        border-top: 1px solid rgba(255, 255, 255, 0.14);
+        box-shadow: var(--shadow-lg);
+        padding: var(--space-sm) var(--space-md) var(--space-md);
+        z-index: 1040;
+    }
+
+    .cm-navbar .navbar-nav {
+        align-items: stretch !important;
+        gap: 2px;
+    }
+
+    .cm-navbar .nav-link {
+        display: block;
+        width: 100%;
+        padding: 10px 12px !important;
+        margin: 0;
+    }
+}
+
 
 /* ═══════════════════════════════════════════════════════════════
    STAT CARDS

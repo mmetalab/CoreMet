@@ -60,7 +60,7 @@ def _get_mpi_db() -> pd.DataFrame:
         try:
             from app.config import Config
             _cfg = Config()
-            _mpi_cache = pd.read_csv(_cfg.MPI_DB_PATH)
+            _mpi_cache = pd.read_csv(_cfg.MPI_DB_PATH, low_memory=False)
             logger.info(f"MPI database loaded for network service: {len(_mpi_cache):,} records")
         except FileNotFoundError:
             logger.warning("MPI database not found for network service")
@@ -70,7 +70,28 @@ def _get_mpi_db() -> pd.DataFrame:
     return _mpi_cache
 
 
-# ── Helper: normalise metabolite query ─────────────────────────────────────
+# ── Helper: normalise values and match queries ─────────────────────────────
+
+def _clean_value(value) -> str:
+    """Return a display-safe string, treating pandas blanks as empty."""
+    if value is None:
+        return ""
+    try:
+        if pd.isna(value):
+            return ""
+    except (TypeError, ValueError):
+        pass
+    text = str(value).strip()
+    if text.lower() in {"", "nan", "none", "null", "<na>"}:
+        return ""
+    return text
+
+
+def _short_label(value, fallback: str = "", max_len: int = 30) -> str:
+    """Clean and truncate a node label."""
+    text = _clean_value(value) or _clean_value(fallback)
+    return text[:max_len] if text else ""
+
 
 def _match_any(df: pd.DataFrame, query: str, cols: list[str]) -> pd.DataFrame:
     """Return rows where any of *cols* match *query* (case-insensitive substring)."""
@@ -80,8 +101,21 @@ def _match_any(df: pd.DataFrame, query: str, cols: list[str]) -> pd.DataFrame:
     mask = pd.Series(False, index=df.index)
     for col in cols:
         if col in df.columns:
-            mask |= df[col].astype(str).str.lower().str.contains(q, na=False)
-    return df[mask]
+            mask |= df[col].astype(str).str.lower().str.contains(q, na=False, regex=False)
+    matches = df[mask].copy()
+    if matches.empty:
+        return matches
+
+    rank = pd.Series(2, index=matches.index)
+    for col in cols:
+        if col not in matches.columns:
+            continue
+        values = matches[col].astype(str).str.strip().str.lower()
+        rank = rank.mask(values.str.startswith(q, na=False), 1)
+        rank = rank.mask(values.eq(q), 0)
+    matches["_match_rank"] = rank
+    matches = matches.sort_values("_match_rank").drop(columns=["_match_rank"])
+    return matches
 
 
 # ── Public API ─────────────────────────────────────────────────────────────
@@ -253,11 +287,6 @@ def build_network_elements(
     # Determine the centre node label and type based on query
     centre_label = query.strip()
     centre_type = query_type
-    q_icon = {"metabolite": "fas fa-atom", "protein": "fas fa-dna",
-              "disease": "fas fa-heartbeat", "microbe": "fas fa-bacterium",
-              "drug": "fas fa-pills", "gene": "fas fa-dna",
-              "snp": "fas fa-map-marker-alt"}.get(query_type, "fas fa-atom")
-
     # Try to find a better label from the data
     if query_type == "metabolite":
         for t, df in hits.items():
@@ -265,9 +294,10 @@ def build_network_elements(
                 continue
             name_col = "Metabolite Name" if t == "MPI" else "Metabolite_Name"
             if name_col in df.columns:
-                names = df[name_col].dropna().unique()
-                if len(names):
-                    centre_label = str(names[0])
+                names = [_clean_value(name) for name in df[name_col].dropna().unique()]
+                names = [name for name in names if name]
+                if names:
+                    centre_label = names[0]
                     break
     elif query_type == "protein":
         for t, df in hits.items():
@@ -275,9 +305,10 @@ def build_network_elements(
                 continue
             name_col = "Protein Name" if t == "MPI" else "Enzyme_Name"
             if name_col in df.columns:
-                names = df[name_col].dropna().unique()
-                if len(names):
-                    centre_label = str(names[0])
+                names = [_clean_value(name) for name in df[name_col].dropna().unique()]
+                names = [name for name in names if name]
+                if names:
+                    centre_label = names[0]
                     break
     elif query_type == "drug":
         for t, df in hits.items():
@@ -285,13 +316,15 @@ def build_network_elements(
                 continue
             for col in ["Drug_Name", "Drug Name"]:
                 if col in df.columns:
-                    names = df[col].dropna().unique()
-                    if len(names):
-                        centre_label = str(names[0])
+                    names = [_clean_value(name) for name in df[col].dropna().unique()]
+                    names = [name for name in names if name]
+                    if names:
+                        centre_label = names[0]
                         break
             if centre_label != query.strip():
                 break
 
+    centre_label = _clean_value(centre_label) or query.strip()
     centre_id = f"{centre_type[:3]}:{centre_label}"
     nodes[centre_id] = {
         "data": {"id": centre_id, "label": centre_label, "node_type": centre_type,
@@ -300,6 +333,9 @@ def build_network_elements(
     }
 
     def _add_node(nid: str, label: str, node_type: str):
+        label = _clean_value(label)
+        if not label:
+            return
         if nid not in nodes:
             nodes[nid] = {
                 "data": {"id": nid, "label": label, "node_type": node_type,
@@ -311,6 +347,8 @@ def build_network_elements(
 
     def _add_edge(source_nid: str, target_nid: str, itype: str, label: str, css_class: str):
         """Add a deduplicated edge."""
+        if source_nid not in nodes or target_nid not in nodes:
+            return
         edge_key = f"{source_nid}|{target_nid}|{itype}"
         if edge_key in edge_seen:
             return
@@ -329,66 +367,72 @@ def build_network_elements(
     mpi_df = hits.get("MPI", pd.DataFrame())
     if not mpi_df.empty:
         for _, row in mpi_df.iterrows():
-            met_name = str(row.get("Metabolite Name", ""))
-            pname = str(row.get("Protein Name", ""))
-            uid = str(row.get("Uniprot ID", ""))
-            hmdb = str(row.get("HMDB ID", ""))
+            met_name = _clean_value(row.get("Metabolite Name", ""))
+            pname = _clean_value(row.get("Protein Name", ""))
+            uid = _clean_value(row.get("Uniprot ID", ""))
+            hmdb = _clean_value(row.get("HMDB ID", ""))
+            if not (met_name or hmdb) or not (pname or uid):
+                continue
 
             met_nid = f"met:{met_name}" if met_name else f"met:{hmdb}"
             prot_nid = f"prot:{uid}" if uid else f"prot:{pname}"
 
             if query_type == "metabolite":
                 # Centre is metabolite, add protein satellite
-                _add_node(prot_nid, pname[:30] if pname else uid, "protein")
+                _add_node(prot_nid, _short_label(pname, uid), "protein")
                 _add_edge(centre_id, prot_nid, "MPI", f"{met_name} ↔ {pname}", "mpi-edge")
             elif query_type == "protein":
                 # Centre is protein, add metabolite satellite
-                _add_node(met_nid, met_name[:30] if met_name else hmdb, "metabolite")
+                _add_node(met_nid, _short_label(met_name, hmdb), "metabolite")
                 _add_edge(centre_id, met_nid, "MPI", f"{pname} ↔ {met_name}", "mpi-edge")
             else:
                 # Generic: add both as satellites connected to each other
-                _add_node(met_nid, met_name[:30], "metabolite")
-                _add_node(prot_nid, pname[:30], "protein")
+                _add_node(met_nid, _short_label(met_name), "metabolite")
+                _add_node(prot_nid, _short_label(pname), "protein")
                 _add_edge(met_nid, prot_nid, "MPI", f"{met_name} ↔ {pname}", "mpi-edge")
 
     # MEI merged into MPI — enzymes shown as proteins
     mei_df = hits.get("MEI_as_MPI", pd.DataFrame())
     if not mei_df.empty:
         for _, row in mei_df.iterrows():
-            met_name = str(row.get("Metabolite_Name", ""))
-            ename = str(row.get("Enzyme_Name", ""))
-            ec = str(row.get("EC_Number", ""))
-            uid = str(row.get("Uniprot_ID", ""))
-            label = ename if ename and ename != "nan" else ec
+            met_name = _clean_value(row.get("Metabolite_Name", ""))
+            ename = _clean_value(row.get("Enzyme_Name", ""))
+            ec = _clean_value(row.get("EC_Number", ""))
+            uid = _clean_value(row.get("Uniprot_ID", ""))
+            label = ename or ec
+            if not met_name or not label:
+                continue
 
             met_nid = f"met:{met_name}"
-            prot_nid = f"prot:{uid}" if uid and uid != "nan" else f"prot:{label}"
+            prot_nid = f"prot:{uid}" if uid else f"prot:{label}"
 
             if query_type == "metabolite":
-                _add_node(prot_nid, label[:30], "protein")
+                _add_node(prot_nid, _short_label(label), "protein")
                 _add_edge(centre_id, prot_nid, "MPI", f"{met_name} ↔ {label}", "mpi-edge")
             elif query_type == "protein":
-                _add_node(met_nid, met_name[:30], "metabolite")
+                _add_node(met_nid, _short_label(met_name), "metabolite")
                 _add_edge(centre_id, met_nid, "MPI", f"{label} ↔ {met_name}", "mpi-edge")
 
     # MDI → disease nodes
     mdi_df = hits.get("MDI", pd.DataFrame())
     if not mdi_df.empty:
         for _, row in mdi_df.iterrows():
-            dname = str(row.get("Disease_Name", ""))
-            met_name = str(row.get("Metabolite_Name", ""))
+            dname = _clean_value(row.get("Disease_Name", ""))
+            met_name = _clean_value(row.get("Metabolite_Name", ""))
+            if not dname or not met_name:
+                continue
 
             dis_nid = f"dis:{dname}"
             met_nid = f"met:{met_name}"
 
             if query_type == "disease":
-                _add_node(met_nid, met_name[:30], "metabolite")
+                _add_node(met_nid, _short_label(met_name), "metabolite")
                 _add_edge(centre_id, met_nid, "MDI", f"{dname} ↔ {met_name}", "mdi-edge")
             elif query_type == "metabolite":
                 _add_node(dis_nid, dname, "disease")
                 _add_edge(centre_id, dis_nid, "MDI", f"{met_name} ↔ {dname}", "mdi-edge")
             else:
-                _add_node(met_nid, met_name[:30], "metabolite")
+                _add_node(met_nid, _short_label(met_name), "metabolite")
                 _add_node(dis_nid, dname, "disease")
                 _add_edge(met_nid, dis_nid, "MDI", f"{met_name} ↔ {dname}", "mdi-edge")
 
@@ -396,85 +440,93 @@ def build_network_elements(
     mmi_df = hits.get("MMI", pd.DataFrame())
     if not mmi_df.empty:
         for _, row in mmi_df.iterrows():
-            mname = str(row.get("Microbe_Name", ""))
-            met_name = str(row.get("Metabolite_Name", ""))
+            mname = _clean_value(row.get("Microbe_Name", ""))
+            met_name = _clean_value(row.get("Metabolite_Name", ""))
+            if not mname or not met_name:
+                continue
 
             mic_nid = f"mic:{mname}"
             met_nid = f"met:{met_name}"
 
             if query_type == "microbe":
-                _add_node(met_nid, met_name[:30], "metabolite")
+                _add_node(met_nid, _short_label(met_name), "metabolite")
                 _add_edge(centre_id, met_nid, "MMI", f"{mname} ↔ {met_name}", "mmi-edge")
             elif query_type == "metabolite":
-                _add_node(mic_nid, mname[:30], "microbe")
+                _add_node(mic_nid, _short_label(mname), "microbe")
                 _add_edge(centre_id, mic_nid, "MMI", f"{met_name} ↔ {mname}", "mmi-edge")
             else:
-                _add_node(met_nid, met_name[:30], "metabolite")
-                _add_node(mic_nid, mname[:30], "microbe")
+                _add_node(met_nid, _short_label(met_name), "metabolite")
+                _add_node(mic_nid, _short_label(mname), "microbe")
                 _add_edge(met_nid, mic_nid, "MMI", f"{met_name} ↔ {mname}", "mmi-edge")
 
     # MDrI → drug nodes
     mdri_df = hits.get("MDrI", pd.DataFrame())
     if not mdri_df.empty:
         for _, row in mdri_df.iterrows():
-            drug_name = str(row.get("Drug_Name", ""))
-            drug_dbid = str(row.get("DrugBank_ID", ""))
-            met_name = str(row.get("Metabolite_Name", ""))
+            drug_name = _clean_value(row.get("Drug_Name", ""))
+            drug_dbid = _clean_value(row.get("DrugBank_ID", ""))
+            met_name = _clean_value(row.get("Metabolite_Name", ""))
+            if not drug_name or not met_name:
+                continue
 
-            drug_nid = f"drug:{drug_dbid}" if drug_dbid and drug_dbid != "nan" else f"drug:{drug_name}"
+            drug_nid = f"drug:{drug_dbid}" if drug_dbid else f"drug:{drug_name}"
             met_nid = f"met:{met_name}"
 
             if query_type == "drug":
-                _add_node(met_nid, met_name[:30], "metabolite")
+                _add_node(met_nid, _short_label(met_name), "metabolite")
                 _add_edge(centre_id, met_nid, "MDrI", f"{drug_name} ↔ {met_name}", "mdri-edge")
             elif query_type == "metabolite":
-                _add_node(drug_nid, drug_name[:30], "drug")
+                _add_node(drug_nid, _short_label(drug_name), "drug")
                 _add_edge(centre_id, drug_nid, "MDrI", f"{met_name} ↔ {drug_name}", "mdri-edge")
             else:
-                _add_node(met_nid, met_name[:30], "metabolite")
-                _add_node(drug_nid, drug_name[:30], "drug")
+                _add_node(met_nid, _short_label(met_name), "metabolite")
+                _add_node(drug_nid, _short_label(drug_name), "drug")
                 _add_edge(met_nid, drug_nid, "MDrI", f"{met_name} ↔ {drug_name}", "mdri-edge")
 
     # MGI → gene nodes
     mgi_df = hits.get("MGI", pd.DataFrame())
     if not mgi_df.empty:
         for _, row in mgi_df.iterrows():
-            gene_sym = str(row.get("Gene_Symbol", ""))
-            gene_id = str(row.get("Gene_ID", ""))
-            met_name = str(row.get("Metabolite_Name", ""))
+            gene_sym = _clean_value(row.get("Gene_Symbol", ""))
+            gene_id = _clean_value(row.get("Gene_ID", ""))
+            met_name = _clean_value(row.get("Metabolite_Name", ""))
+            if not (gene_sym or gene_id) or not met_name:
+                continue
 
-            gene_nid = f"gene:{gene_sym}" if gene_sym and gene_sym != "nan" else f"gene:{gene_id}"
+            gene_nid = f"gene:{gene_sym}" if gene_sym else f"gene:{gene_id}"
             met_nid = f"met:{met_name}"
 
             if query_type == "gene":
-                _add_node(met_nid, met_name[:30], "metabolite")
+                _add_node(met_nid, _short_label(met_name), "metabolite")
                 _add_edge(centre_id, met_nid, "MGI", f"{gene_sym} ↔ {met_name}", "mgi-edge")
             elif query_type == "metabolite":
-                _add_node(gene_nid, gene_sym[:30], "gene")
+                _add_node(gene_nid, _short_label(gene_sym, gene_id), "gene")
                 _add_edge(centre_id, gene_nid, "MGI", f"{met_name} ↔ {gene_sym}", "mgi-edge")
             else:
-                _add_node(met_nid, met_name[:30], "metabolite")
-                _add_node(gene_nid, gene_sym[:30], "gene")
+                _add_node(met_nid, _short_label(met_name), "metabolite")
+                _add_node(gene_nid, _short_label(gene_sym, gene_id), "gene")
                 _add_edge(met_nid, gene_nid, "MGI", f"{met_name} ↔ {gene_sym}", "mgi-edge")
 
     # mGWAS → SNP nodes
     mgwas_df = hits.get("mGWAS", pd.DataFrame())
     if not mgwas_df.empty:
         for _, row in mgwas_df.iterrows():
-            rsid = str(row.get("rsID", ""))
-            met_name = str(row.get("Metabolite_Name", ""))
+            rsid = _clean_value(row.get("rsID", ""))
+            met_name = _clean_value(row.get("Metabolite_Name", ""))
+            if not rsid or not met_name:
+                continue
 
             snp_nid = f"snp:{rsid}"
             met_nid = f"met:{met_name}"
 
             if query_type == "snp":
-                _add_node(met_nid, met_name[:30], "metabolite")
+                _add_node(met_nid, _short_label(met_name), "metabolite")
                 _add_edge(centre_id, met_nid, "mGWAS", f"{rsid} ↔ {met_name}", "mgwas-edge")
             elif query_type == "metabolite":
                 _add_node(snp_nid, rsid, "snp")
                 _add_edge(centre_id, snp_nid, "mGWAS", f"{met_name} ↔ {rsid}", "mgwas-edge")
             else:
-                _add_node(met_nid, met_name[:30], "metabolite")
+                _add_node(met_nid, _short_label(met_name), "metabolite")
                 _add_node(snp_nid, rsid, "snp")
                 _add_edge(met_nid, snp_nid, "mGWAS", f"{met_name} ↔ {rsid}", "mgwas-edge")
 
@@ -488,6 +540,12 @@ def build_network_elements(
         nodes = {k: v for k, v in nodes.items() if k in keep}
         edges = [e for e in edges
                  if e["data"]["source"] in keep and e["data"]["target"] in keep]
+
+    type_counts = {t: 0 for t in ["MPI", "MDI", "MMI", "MDrI", "MGI", "mGWAS"]}
+    for edge in edges:
+        itype = edge.get("data", {}).get("interaction_type")
+        if itype in type_counts:
+            type_counts[itype] += 1
 
     elements = list(nodes.values()) + edges
 
@@ -503,33 +561,26 @@ def build_network_elements(
 
 
 def get_available_organisms() -> list[str]:
-    """Return sorted list of all unique organisms across databases."""
+    """Return organism labels without loading the heaviest database at page load."""
     orgs: set[str] = set()
     try:
         mpi = _get_mpi_db()
         if mpi is not None and "Species" in mpi.columns:
-            orgs.update(mpi["Species"].dropna().unique())
+            orgs.update(_clean_value(org) for org in mpi["Species"].dropna().unique())
     except Exception:
         pass
     try:
         from app.services.mei_service import get_mei_db
         mei = get_mei_db()
         if not mei.empty and "Species" in mei.columns:
-            orgs.update(mei["Species"].dropna().unique())
+            orgs.update(_clean_value(org) for org in mei["Species"].dropna().unique())
     except Exception:
         pass
     try:
         from app.services.mmi_service import get_mmi_db
         mmi = get_mmi_db()
         if not mmi.empty and "Organism" in mmi.columns:
-            orgs.update(mmi["Organism"].dropna().unique())
+            orgs.update(_clean_value(org) for org in mmi["Organism"].dropna().unique())
     except Exception:
         pass
-    try:
-        from app.services.mgi_service import get_mgi_db
-        mgi = get_mgi_db()
-        if not mgi.empty and "Organism" in mgi.columns:
-            orgs.update(mgi["Organism"].dropna().unique())
-    except Exception:
-        pass
-    return sorted(orgs)
+    return sorted(org for org in orgs if org)

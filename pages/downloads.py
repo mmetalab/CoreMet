@@ -30,7 +30,7 @@ def _load_counts():
 _C = _load_counts()
 
 
-def _download_card(name, description, fmt, records, version, href, color="#1a365d"):
+def _download_card(name, description, fmt, records, version, href, color="#1a365d", disabled=False):
     """Single download card with metadata."""
     return dbc.Col(
         html.Div([
@@ -58,9 +58,9 @@ def _download_card(name, description, fmt, records, version, href, color="#1a365
             ], style={"display": "flex", "gap": "16px", "flexWrap": "wrap", "marginBottom": "12px"}),
             dbc.Button([
                 html.I(className="fas fa-download me-2"),
-                "Download",
-            ], href=href, size="sm", outline=True, color="primary",
-               style={"fontSize": "0.8rem"}),
+                "Download" if not disabled else "Optional",
+            ], href=None if disabled else href, size="sm", outline=True, color="primary",
+               disabled=disabled, style={"fontSize": "0.8rem"}),
         ], className="cm-card", style={"padding": "20px", "height": "100%"}),
         md=6, lg=4, className="mb-3",
     )
@@ -107,12 +107,12 @@ layout = html.Div([
             ),
             _download_card(
                 "Node Metadata", "All entities with identifiers, aliases, and annotations.",
-                "CSV", "~50,000", "v3.0",
+                "JSON", "~50,000", "v3.0",
                 "/api/v1/download/node-metadata", "#1a365d",
             ),
             _download_card(
                 "Schema Documentation", "Data dictionary and column definitions.",
-                "PDF", "-", "v3.0",
+                "Markdown", "-", "v3.0",
                 "/api/v1/download/schema", "#1a365d",
             ),
         ], className="g-3 mb-4"),
@@ -171,12 +171,12 @@ layout = html.Div([
             _download_card(
                 "Node Embeddings", "128-dim GraphSAGE embeddings for all entities.",
                 "NPZ", "~50,000", "v3.0",
-                "/api/v1/download/embeddings", "#718096",
+                "/api/v1/download/embeddings", "#718096", disabled=True,
             ),
             _download_card(
                 "Pre-trained Model", "GraphSAGE model weights for transfer learning.",
                 "PT", "-", "v3.0",
-                "/api/v1/download/model", "#718096",
+                "/api/v1/download/model", "#718096", disabled=True,
             ),
         ], className="g-3 mb-5"),
 
