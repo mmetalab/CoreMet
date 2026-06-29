@@ -8,9 +8,9 @@ download if the data already exists (e.g., on a persistent disk).
 
 Set DATA_BUNDLE_URL to a direct-download archive (.zip or .tar.gz) containing the
 runtime `data/` subset. For Zenodo: use the file's direct URL
-(https://zenodo.org/records/21027608/files/<file>?download=1).
+(https://zenodo.org/records/21032647/files/<file>?download=1).
 
-    DATA_BUNDLE_URL=https://zenodo.org/records/21027608/files/coremetdb_runtime.zip?download=1 \
+    DATA_BUNDLE_URL=https://zenodo.org/records/21032647/files/coremetdb_runtime.zip?download=1 \
         python scripts/fetch_data.py
 """
 from __future__ import annotations

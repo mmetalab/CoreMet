@@ -49,7 +49,7 @@ git ls-files | xargs du -h 2>/dev/null | sort -rh | head
 4. **Publish**, then copy:
    - the record **DOI** (for the manuscript), and
    - the **direct download URL** of `coremet_runtime_core.zip`:
-     `https://zenodo.org/records/21027608/files/coremet_runtime_core.zip?download=1`
+     `https://zenodo.org/records/21032647/files/coremet_runtime_core.zip?download=1`
 
 You will paste that runtime URL into Render as `DATA_BUNDLE_URL` (Part 3).
 

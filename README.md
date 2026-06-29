@@ -57,7 +57,7 @@ conda create -n coremet python=3.10 -y && conda activate coremet
 pip install -r requirements.txt
 
 # Fetch the runtime data (Zenodo URL from DEPLOY_RENDER.md):
-DATA_BUNDLE_URL="https://zenodo.org/records/21027608/files/coremet_runtime_core.zip?download=1" \
+DATA_BUNDLE_URL="https://zenodo.org/records/21032647/files/coremet_runtime_core.zip?download=1" \
     python scripts/fetch_data.py
 
 python run.py            # serves on http://localhost:8080
