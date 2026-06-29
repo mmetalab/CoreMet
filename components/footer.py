@@ -11,7 +11,7 @@ def make_footer():
         [
             html.Span("CoreMet"),
             html.Span(" | "),
-            html.A("GitHub", href="https://github.com/", target="_blank"),
+            html.A("GitHub", href="https://github.com/mmetalab/CoreMet", target="_blank"),
             html.Span(" | "),
             html.A("Downloads", href="/downloads"),
             html.Span(" | "),
