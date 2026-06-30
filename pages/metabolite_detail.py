@@ -346,20 +346,26 @@ def _linkify_pmids(df: pd.DataFrame) -> pd.DataFrame:
     """Convert PMID columns to PubMed markdown links."""
     df = df.copy()
     if "PMID" in df.columns:
-        mask = df["PMID"].astype(str).str.match(r"^\d+$", na=False)
-        df.loc[mask, "PMID"] = (
-            "[" + df.loc[mask, "PMID"].astype(str) +
+        pmids = df["PMID"].astype("string").fillna("").astype(str)
+        mask = pmids.str.match(r"^\d+$", na=False)
+        linked = pmids.copy()
+        linked.loc[mask] = (
+            "[" + pmids.loc[mask] +
             "](https://pubmed.ncbi.nlm.nih.gov/" +
-            df.loc[mask, "PMID"].astype(str) + ")"
+            pmids.loc[mask] + ")"
         )
+        df["PMID"] = linked
     if "Source" in df.columns:
-        src_mask = df["Source"].astype(str).str.match(r"^PMID:\d+$", na=False)
+        sources = df["Source"].astype("string").fillna("").astype(str)
+        src_mask = sources.str.match(r"^PMID:\d+$", na=False)
         if src_mask.any():
-            pmid_nums = df.loc[src_mask, "Source"].str.replace("PMID:", "", regex=False)
-            df.loc[src_mask, "Source"] = (
-                "[" + df.loc[src_mask, "Source"] +
+            linked = sources.copy()
+            pmid_nums = sources.loc[src_mask].str.replace("PMID:", "", regex=False)
+            linked.loc[src_mask] = (
+                "[" + sources.loc[src_mask] +
                 "](https://pubmed.ncbi.nlm.nih.gov/" + pmid_nums + ")"
             )
+            df["Source"] = linked
     return df
 
 
@@ -379,13 +385,17 @@ def _linkify_entities(df: pd.DataFrame) -> pd.DataFrame:
     for col, url_tpl in _LINK_MAP.items():
         if col not in df.columns:
             continue
-        vals = df[col].astype(str)
-        mask = vals.str.strip().ne("") & vals.ne("nan")
+        vals = df[col].astype("string").fillna("").astype(str)
+        stripped = vals.str.strip()
+        mask = stripped.ne("") & ~stripped.str.lower().isin({"nan", "none", "na", "n/a", "null"})
         if not mask.any():
             continue
-        df.loc[mask, col] = (
-            "[" + vals[mask] + "](" + vals[mask].map(lambda v: url_tpl.format(v.strip())) + ")"
+        linked = vals.copy()
+        linked.loc[mask] = (
+            "[" + stripped.loc[mask] + "](" +
+            stripped.loc[mask].map(lambda v: url_tpl.format(v.strip())) + ")"
         )
+        df[col] = linked
     return df
 
 
@@ -1515,7 +1525,7 @@ def _build_export_section(data: dict, met_name: str, hmdb_id: str) -> html.Div:
             "API Endpoint",
         ], style={"fontSize": "0.9rem", "fontWeight": "600", "marginBottom": "8px"}),
         html.Pre(
-            html.Code(f"curl -s 'http://localhost:8080/api/v1/export/metabolite?{q}&db=all'"),
+            html.Code(f"curl -s 'https://www.coremet.org/api/v1/export/metabolite?{q}&db=all'"),
             style={"backgroundColor": "#2d3748", "color": "#e2e8f0",
                    "padding": "10px", "borderRadius": "6px",
                    "fontSize": "0.78rem", "overflowX": "auto"},

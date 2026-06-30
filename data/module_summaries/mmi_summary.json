@@ -1,0 +1,40 @@
+{
+  "stat_cards": {
+    "Total Interactions": 77605,
+    "Metabolites": 526,
+    "Microbes": 1262,
+    "Organisms": 2
+  },
+  "charts": {
+    "Evidence Type": {
+      "Predicted": 75717,
+      "Experimental": 1888
+    },
+    "Data Source": {
+      "AGORA2": 75717,
+      "gutMGene": 1888
+    },
+    "Top Microbes": {
+      "Escherichia coli SE11": 143,
+      "Klebsiella oxytoca KCTC 1686": 142,
+      "Hafnia alvei BIDMC 31": 139,
+      "Yokenella regensburgei ATCC 43003": 138,
+      "Raoultella planticola ATCC 33531": 138,
+      "Citrobacter amalonaticus Y19": 137,
+      "Citrobacter freundii ATCC 8090 = MTCC 1658": 137,
+      "Enterobacter aerogenes KCTC 2190": 137,
+      "Escherichia coli str. K-12 substr. MG1655": 136,
+      "Citrobacter freundii UCI 31": 136,
+      "Escherichia coli UTI89 (UPEC)": 136,
+      "Escherichia sp. 4 1 40B": 136,
+      "Shigella sonnei Ss046": 135,
+      "Escherichia fergusonii ATCC 35469": 135,
+      "Escherichia sp. 3 2 53FAA": 134
+    },
+    "Relationship Types": {
+      "exchange": 75717,
+      "correlative": 1253,
+      "causal": 635
+    }
+  }
+}

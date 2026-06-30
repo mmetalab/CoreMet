@@ -20,21 +20,49 @@ class DataService:
     
     def __init__(self):
         self.config = Config()
-        self.docking_db = None
-        self.mpi_db = None
-        self._load_databases()
+        self._docking_db = None
+        self._mpi_db = None
+
+    @property
+    def docking_db(self):
+        """Load Docking DB only when a docking route needs it."""
+        if self._docking_db is None:
+            self._load_docking_db()
+        return self._docking_db
+
+    @property
+    def mpi_db(self):
+        """Load MPI DB only when an MPI route needs it."""
+        if self._mpi_db is None:
+            self._load_mpi_db()
+        return self._mpi_db
+
+    def _load_docking_db(self):
+        try:
+            if self.config.DOCKING_DB_PATH.exists():
+                self._docking_db = pd.read_csv(self.config.DOCKING_DB_PATH)
+            else:
+                self._docking_db = pd.DataFrame()
+        except Exception as e:
+            logger.error(f"Error loading docking database: {e}")
+            self._docking_db = pd.DataFrame()
+
+    def _load_mpi_db(self):
+        try:
+            if self.config.MPI_DB_PATH.exists():
+                from app.services.csv_loader import load_optimized
+                self._mpi_db = load_optimized(self.config.MPI_DB_PATH)
+            else:
+                self._mpi_db = pd.DataFrame()
+        except Exception as e:
+            logger.error(f"Error loading MPI database: {e}")
+            self._mpi_db = pd.DataFrame()
     
     def _load_databases(self):
         """Load database files"""
         try:
-            # Load docking database
-            if self.config.DOCKING_DB_PATH.exists():
-                self.docking_db = pd.read_csv(self.config.DOCKING_DB_PATH)
-            
-            # Load MPI database
-            if self.config.MPI_DB_PATH.exists():
-                self.mpi_db = pd.read_csv(self.config.MPI_DB_PATH, low_memory=False)
-            
+            self._load_docking_db()
+            self._load_mpi_db()
             logger.info("Databases loaded successfully")
 
         except Exception as e:

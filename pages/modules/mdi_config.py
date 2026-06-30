@@ -20,7 +20,7 @@ MDI_CONFIG = {
     'short_name': 'MDI',
     'icon': 'fas fa-disease',
     'color': '#D55E00',
-    'description': '82,882 metabolite–disease associations from CTD (2025) and HMDB (v5.0, 2024) across 130 diseases and 22 categories',
+    'description': '82,882 metabolite–disease associations from CTD (2025) and HMDB (v5.0, 2024) across 3,595 disease targets and 22 categories',
     'data_transform': _mdi_transform,
     'columns': {
         'display': ['HMDB_ID', 'Metabolite_Name', 'Disease_Name', 'Category',

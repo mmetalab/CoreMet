@@ -3,17 +3,19 @@
 
 def _mmi_transform(df):
     """Classify evidence: gutMGene (wet-lab validated) = Experimental, AGORA2 (flux modeling) = Predicted."""
+    df = df.copy()
     if 'Source' in df.columns:
-        df['evidence_type'] = df['Source'].map({
+        sources = df['Source'].astype('string').fillna('').astype(str)
+        df['evidence_type'] = sources.map({
             'gutMGene': 'Experimental',
             'AGORA2': 'Predicted',
-        }).fillna('Predicted')
+        }).fillna('Predicted').astype(str)
     else:
         df['evidence_type'] = 'Predicted'
     if 'confidence' not in df.columns:
-        df['confidence'] = df['evidence_type'].map({
+        df['confidence'] = df['evidence_type'].astype(str).map({
             'Experimental': 0.9, 'Predicted': 0.6,
-        }).fillna(0.5)
+        }).fillna(0.5).astype(float)
     return df
 
 
@@ -23,8 +25,9 @@ MMI_CONFIG = {
     'short_name': 'MMI',
     'icon': 'fas fa-bacterium',
     'color': '#009E73',
-    'description': '83,149 metabolite–microbe interactions from gutMGene (v2.0, 2023) and AGORA2 (VMH, 2023) covering 1,262 microbes',
+    'description': '77,605 release metabolite–microbe interactions from gutMGene (v2.0, 2023) and AGORA2 (VMH, 2023) covering 1,262 microbes',
     'data_transform': _mmi_transform,
+    'precomputed_summary': 'data/module_summaries/mmi_summary.json',
     'columns': {
         'display': ['Metabolite_Name', 'HMDB_ID', 'Microbe_Name', 'Rank',
                      'Relationship_Type', 'Tissue', 'Organism',

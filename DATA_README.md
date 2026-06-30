@@ -1,10 +1,10 @@
-# CoreMet, Dataset (v1, 2026)
+# CoreMet Dataset (v1.0, June 2026)
 
 A metabolite-centered cross-domain interaction knowledge graph. This deposit contains
 the curated, deduplicated interaction tables underlying the CoreMet web resource.
 Record counts match exactly those reported in the manuscript and on the website.
 
-**License:** CC BY 4.0 · **Web resource:** https://www.coremet.org · **Code:** [GitHub URL]
+**License:** CC BY 4.0 · **Web resource:** https://www.coremet.org · **Code:** https://github.com/mmetalab/CoreMet
 
 ## Contents
 
@@ -17,14 +17,17 @@ Record counts match exactly those reported in the manuscript and on the website.
 | `coremetdb_mdri.csv` | 3,500 | Metabolite–drug interactions (DrugBank) |
 | `coremetdb_mgi.csv` | 1,658,745 | Metabolite–gene interactions (CTD) |
 | `coremetdb_mgwas.csv` | 44,344 | Metabolite–SNP associations (GWAS Catalog) |
-| `coremetdb_stats.json` |, | Machine-readable summary statistics (single source of truth) |
+| `coremetdb_stats.json` | - | Machine-readable summary statistics (single source of truth) |
 | **Total** | **1,952,688** | 30,674 unique metabolites; 8 node types; 7 edge types |
 
 ## Common columns
 
-All tables are HMDB-anchored and share a provenance model:
+All tables share a common provenance model. HMDB identifiers are provided where
+available; coverage is complete or near-complete in MDI, MMI, MDrI, MGI, and
+mGWAS, while KEGG/Rhea-derived MPI and MEI records retain source identifiers
+when an unambiguous HMDB mapping is not available.
 
-- **HMDB_ID / `HMDB ID`**, metabolite primary key (HMDB accession).
+- **HMDB_ID / `HMDB ID`**, HMDB accession where available.
 - **Metabolite_Name / SMILES**, name and structure (SMILES where available).
 - **Source / Evidence_Source**, originating database(s).
 - **Evidence_Level / evidence_type**, evidence tier (experimental, curated, inferred, computational).

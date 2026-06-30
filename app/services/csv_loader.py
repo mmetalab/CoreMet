@@ -23,5 +23,6 @@ def load_optimized(path, **read_csv_kwargs) -> pd.DataFrame:
     """
     read_csv_kwargs.setdefault("dtype", "category")
     read_csv_kwargs.setdefault("keep_default_na", False)  # blanks -> "" (a valid category), no NaN
+    read_csv_kwargs.setdefault("na_filter", False)
     read_csv_kwargs.pop("low_memory", None)               # irrelevant with an explicit dtype
     return pd.read_csv(path, **read_csv_kwargs)

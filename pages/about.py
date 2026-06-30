@@ -38,24 +38,27 @@ layout = html.Div([
         # ── Overview ───────────────────────────────────────────
         _info_card("fa-info-circle", "About CoreMet", [
             html.P([
-                "CoreMet is a comprehensive web platform for exploring metabolite–protein, "
-                "metabolite–disease, metabolite–microbe, and metabolite–drug interactions. "
-                "It integrates curated data from multiple public databases and provides "
-                "GraphSAGE-based machine learning predictions for novel interaction discovery."
+                "CoreMet is a comprehensive web platform for exploring metabolite-centered "
+                "interactions across proteins, enzymes, diseases, microbes, drugs, genes, "
+                "and genetic variants. It integrates curated data from multiple public "
+                "databases; prediction is provided only as an optional beta feature for "
+                "hypothesis generation."
             ], style={"fontSize": "0.9rem", "color": "#718096", "lineHeight": "1.65"}),
             html.P([
                 "The platform currently hosts ",
-                html.Strong("377,164"),
-                " curated interactions spanning ",
-                html.Strong("10 organisms"),
+                html.Strong("1,952,688"),
+                " curated interactions across seven layers, spanning ",
+                html.Strong("10 MPI organisms"),
                 ", ",
-                html.Strong("130 diseases"),
-                " across ",
+                html.Strong("3,595 disease targets"),
+                " in the MDI release, ",
+                html.Strong("112 release-backed Disease Explorer networks"),
+                ", ",
                 html.Strong("22 categories"),
                 ", ",
                 html.Strong("3,500 drug interactions"),
                 ", and ",
-                html.Strong("100+ tissues"),
+                html.Strong("44,344 metabolite-SNP associations"),
                 "."
             ], style={"fontSize": "0.9rem", "color": "#718096", "lineHeight": "1.65"}),
         ]),

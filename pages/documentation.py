@@ -131,14 +131,14 @@ layout = html.Div([
             tips=[
                 "HMDB IDs, UniProt IDs, and DrugBank IDs are clickable hyperlinks to their respective databases.",
                 "The mini donut chart on the sidebar shows the distribution of the current filter group.",
-                "Switch interaction types frequently, the database covers 37K+ MPI, 197K+ MEI, 55K+ MDI, 83K+ MMI, and 3.5K MDrI records (377K+ total).",
+                "Switch interaction types frequently, the database covers 38K+ MPI, 48K+ MEI, 83K+ MDI, 78K+ MMI, 3.5K MDrI, 1.66M MGI, and 44K+ mGWAS records.",
             ],
         ),
 
         # ── 2. Predict ────────────────────────────────────────
         html.Div(id="sec-predict"),
         _tutorial_section(
-            "predict", "fa-project-diagram", "2. Interaction Prediction",
+            "predict", "fa-project-diagram", "2. Optional Prediction",
             [
                 ("Prepare Your Input",
                  "Prepare a list of metabolites (HMDB IDs or names) and proteins (UniProt IDs, "
@@ -150,16 +150,16 @@ layout = html.Div([
                  "Paste your protein list in the right text area. Supports UniProt IDs "
                  "(e.g., P04217), gene names (e.g., ALB), or full protein names."),
                 ("Run Prediction",
-                 "Click 'Predict Interactions' to submit. The GraphSAGE model scores all pairwise "
-                 "combinations and returns ranked predictions with confidence scores."),
+                 "Click 'Predict Interactions' to submit an optional beta job. Prediction is for "
+                 "hypothesis generation and is separate from the curated database content."),
                 ("View & Export Results",
                  "Results appear in an interactive table. Sort by score, filter by metabolite/protein, "
                  "and download as CSV. Predictions above 0.5 are considered high-confidence."),
             ],
             tips=[
                 "Use the example data buttons to quickly test with pre-loaded metabolite and protein lists.",
-                "Higher prediction scores indicate stronger evidence for interaction.",
-                "You can predict up to 500 metabolites × 500 proteins in a single run.",
+                "Higher prediction scores indicate stronger model support, not curated evidence.",
+                "For database-only workflows, use Browse, Search, Downloads, or the REST API without running prediction.",
             ],
         ),
 
@@ -169,7 +169,7 @@ layout = html.Div([
             "disease", "fa-heartbeat", "3. Disease Explorer",
             [
                 ("Select a Disease",
-                 "Use the left sidebar to pick from 130 pre-computed disease panels. "
+                 "Use the left sidebar to pick from 112 release-backed disease network panels. "
                  "Filter by category (Cancer, Neurodegenerative, Metabolic, Ophthalmological, etc.) or tissue type."),
                 ("View Category & Tissue Filters",
                  "Use the 'Category' and 'Tissue' dropdowns above the disease list to narrow "
@@ -274,7 +274,7 @@ layout = html.Div([
                 html.H4("7. REST API", style={"fontWeight": "600", "marginBottom": "0"}),
             ], style={"display": "flex", "alignItems": "center", "marginBottom": "16px"}),
 
-            html.P("CoreMet exposes a RESTful API for programmatic access.",
+            html.P("CoreMet exposes a RESTful API for programmatic access; prediction is optional and beta.",
                    style={"fontSize": "0.9rem", "color": "#718096", "marginBottom": "12px"}),
 
             html.Div([
@@ -285,23 +285,23 @@ layout = html.Div([
                         html.Th("Description", style={"padding": "8px 12px", "fontWeight": "600"}),
                     ]), style={"backgroundColor": "#1a365d", "color": "#f7fafc"}),
                     html.Tbody([
-                        html.Tr([html.Td("/api/predict", style={"padding": "8px 12px"}),
+                        html.Tr([html.Td("/api/v1/predict", style={"padding": "8px 12px"}),
                                  html.Td("POST", style={"padding": "8px 12px"}),
-                                 html.Td("Submit metabolite–protein pairs for prediction",
+                                 html.Td("Optional beta metabolite–protein prediction job",
                                          style={"padding": "8px 12px"})]),
-                        html.Tr([html.Td("/api/search", style={"padding": "8px 12px"}),
+                        html.Tr([html.Td("/api/v1/database/search", style={"padding": "8px 12px"}),
                                  html.Td("GET", style={"padding": "8px 12px"}),
-                                 html.Td("Search the database by keyword",
+                                 html.Td("Search the MPI database by keyword or structured filters",
                                          style={"padding": "8px 12px"})]),
-                        html.Tr([html.Td("/api/species", style={"padding": "8px 12px"}),
+                        html.Tr([html.Td("/api/v1/species", style={"padding": "8px 12px"}),
                                  html.Td("GET", style={"padding": "8px 12px"}),
                                  html.Td("List all available species",
                                          style={"padding": "8px 12px"})]),
-                        html.Tr([html.Td("/api/results/<id>", style={"padding": "8px 12px"}),
+                        html.Tr([html.Td("/api/v1/results/<id>", style={"padding": "8px 12px"}),
                                  html.Td("GET", style={"padding": "8px 12px"}),
                                  html.Td("Retrieve prediction results by job ID",
                                          style={"padding": "8px 12px"})]),
-                        html.Tr([html.Td("/api/health", style={"padding": "8px 12px"}),
+                        html.Tr([html.Td("/api/v1/health", style={"padding": "8px 12px"}),
                                  html.Td("GET", style={"padding": "8px 12px"}),
                                  html.Td("Health check endpoint",
                                          style={"padding": "8px 12px"})]),
@@ -335,9 +335,9 @@ layout = html.Div([
                     html.Strong("Example: cURL prediction request"),
                 ], style={"marginBottom": "8px"}),
                 html.Pre(
-                    'curl -X POST http://localhost:8080/api/predict \\\n'
+                    'curl -X POST https://www.coremet.org/api/v1/predict \\\n'
                     '  -H "Content-Type: application/json" \\\n'
-                    '  -d \'{"metabolites": ["HMDB0000001"], "proteins": ["P04217"]}\'',
+                    '  -d \'{"metabolites":[{"name":"D-Glucose","hmdb_id":"HMDB0000122","smiles":"C(C1C(C(C(C(O1)O)O)O)O)O"}],"proteins":[{"uniprot_id":"P35557","name":"Glucokinase","gene":"GCK","organism":"Homo sapiens","sequence":"M"}],"organism":"Homo sapiens"}\'',
                     style={
                         "background": "#1a202c", "color": "#e2e8f0",
                         "padding": "12px 16px", "borderRadius": "8px",

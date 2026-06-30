@@ -3,7 +3,10 @@ Landing page, clean, journal-like homepage for CoreMet.
 Hero + search bar + stats + "What you can do" + architecture overview.
 """
 
-from dash import html, dcc, Input, Output, State, callback, no_update
+from functools import lru_cache
+from urllib.parse import quote_plus
+
+from dash import html, Input, Output, State, callback, no_update
 import dash_bootstrap_components as dbc
 
 
@@ -145,6 +148,26 @@ def _layer_chip(label, count, color, href):
     )
 
 
+@lru_cache(maxsize=1)
+def _load_home_metabolite_index():
+    """Small cached metabolite index for homepage suggestions."""
+    try:
+        from app.config import Config
+        import pandas as pd
+
+        cfg = Config()
+        df = pd.read_csv(cfg.MPI_DB_PATH, usecols=["HMDB ID", "Metabolite Name"], dtype=str)
+        df = df.fillna("").drop_duplicates(subset=["HMDB ID"])
+        df = df[df["Metabolite Name"].str.strip().ne("")]
+        return df[["HMDB ID", "Metabolite Name"]]
+    except Exception:
+        return None
+
+
+def _home_search_href(query: str) -> str:
+    return f"/search?q={quote_plus(query.strip())}"
+
+
 # --------------------------------------------------------------------------
 # LAYOUT
 # --------------------------------------------------------------------------
@@ -171,16 +194,24 @@ layout = html.Div([
 
             # ── Central search bar ──
             html.Div([
-                dcc.Dropdown(
-                    id="home-search-dropdown",
-                    placeholder="Search a metabolite, disease, gene, protein, drug, microbe, or SNP…",
-                    searchable=True,
-                    clearable=True,
-                    style={"fontSize": "0.95rem"},
-                ),
-            ], style={
-                "maxWidth": "620px", "margin": "0 auto 16px",
-            }),
+                dbc.InputGroup([
+                    dbc.Input(
+                        id="home-search-input",
+                        placeholder="Search a metabolite, disease, gene, protein, drug, microbe, or SNP…",
+                        type="text",
+                        debounce=False,
+                        className="home-search-input",
+                    ),
+                    dbc.Button(
+                        html.I(className="fas fa-search"),
+                        id="home-search-btn",
+                        color="primary",
+                        className="home-search-button",
+                        n_clicks=0,
+                    ),
+                ], className="home-search-control"),
+                html.Div(id="home-search-suggestions", className="home-search-suggestions"),
+            ], className="home-search-wrap"),
 
             # ── Example prompts ──
             html.Div([
@@ -294,118 +325,61 @@ layout = html.Div([
 # --------------------------------------------------------------------------
 
 @callback(
-    Output("home-search-dropdown", "options"),
-    Input("home-search-dropdown", "search_value"),
+    Output("home-search-suggestions", "children"),
+    Input("home-search-input", "value"),
     prevent_initial_call=True,
 )
 def home_search_autocomplete(search_value):
-    """Multi-entity autocomplete for the homepage search bar."""
-    if not search_value or len(search_value) < 2:
-        return []
+    """Lightweight homepage suggestions; search still works for any free text."""
+    if not search_value or len(search_value.strip()) < 2:
+        return None
 
-    options = []
-    q = search_value.lower()
+    query = search_value.strip()
+    q = query.lower()
+    rows = [
+        html.A([
+            html.I(className="fas fa-search me-2"),
+            html.Span(f'Search all CoreMet for "{query}"'),
+        ], href=_home_search_href(query), className="home-search-suggestion-row primary"),
+    ]
 
-    # Search metabolites (MPI)
-    try:
-        from app.config import Config
-        import pandas as pd
-        cfg = Config()
-        mpi = pd.read_csv(cfg.MPI_DB_PATH, usecols=["HMDB ID", "Metabolite Name"], dtype=str)
-        mpi = mpi.dropna(subset=["Metabolite Name"]).drop_duplicates(subset=["HMDB ID"])
-        matches = mpi[mpi["Metabolite Name"].str.lower().str.contains(q, na=False)].head(5)
-        for _, row in matches.iterrows():
-            options.append({
-                "label": f"{row['Metabolite Name']}, Metabolite",
-                "value": f"metabolite:{row['HMDB ID']}",
-            })
-    except Exception:
-        pass
+    index = _load_home_metabolite_index()
+    if index is not None and not index.empty:
+        name_lower = index["Metabolite Name"].str.lower()
+        hmdb_lower = index["HMDB ID"].str.lower()
+        starts = index[name_lower.str.startswith(q, na=False) | hmdb_lower.str.startswith(q, na=False)]
+        contains = index[
+            (name_lower.str.contains(q, na=False, regex=False) | hmdb_lower.str.contains(q, na=False, regex=False))
+            & ~index.index.isin(starts.index)
+        ]
+        match_indexes = list(starts.head(4).index)
+        if len(match_indexes) < 4:
+            match_indexes += list(contains.head(4 - len(match_indexes)).index)
+        matches = index.loc[match_indexes]
+        for _, row in matches.head(4).iterrows():
+            name = str(row["Metabolite Name"])
+            hmdb_id = str(row["HMDB ID"])
+            rows.append(html.A([
+                html.I(className="fas fa-atom me-2"),
+                html.Span(name),
+                html.Span(hmdb_id, className="home-search-suggestion-meta"),
+            ], href=f"/metabolite?id={quote_plus(hmdb_id)}", className="home-search-suggestion-row"))
 
-    # Search diseases (MDI)
-    try:
-        from app.services.mdi_service import get_mdi_db
-        mdi = get_mdi_db()
-        if mdi is not None and "Disease_Name" in mdi.columns:
-            matches = mdi[mdi["Disease_Name"].str.lower().str.contains(q, na=False)]
-            for name in matches["Disease_Name"].unique()[:5]:
-                options.append({"label": f"{name}, Disease", "value": f"disease:{name}"})
-    except Exception:
-        pass
-
-    # Search genes (MGI)
-    try:
-        from app.services.mgi_service import get_mgi_db
-        mgi = get_mgi_db()
-        if mgi is not None and "Gene_Symbol" in mgi.columns:
-            matches = mgi[mgi["Gene_Symbol"].str.lower().str.contains(q, na=False)]
-            for name in matches["Gene_Symbol"].unique()[:5]:
-                options.append({"label": f"{name}, Gene", "value": f"gene:{name}"})
-    except Exception:
-        pass
-
-    # Search drugs (MDrI)
-    try:
-        from app.services.mdri_service import get_mdri_db
-        mdri = get_mdri_db()
-        if mdri is not None and "Drug_Name" in mdri.columns:
-            matches = mdri[mdri["Drug_Name"].str.lower().str.contains(q, na=False)]
-            for name in matches["Drug_Name"].unique()[:5]:
-                options.append({"label": f"{name}, Drug", "value": f"drug:{name}"})
-    except Exception:
-        pass
-
-    # Search microbes (MMI)
-    try:
-        from app.services.mmi_service import get_mmi_db
-        mmi = get_mmi_db()
-        if mmi is not None and "Microbe_Name" in mmi.columns:
-            matches = mmi[mmi["Microbe_Name"].str.lower().str.contains(q, na=False)]
-            for name in matches["Microbe_Name"].unique()[:5]:
-                options.append({"label": f"{name}, Microbe", "value": f"microbe:{name}"})
-    except Exception:
-        pass
-
-    # Search SNPs (mGWAS)
-    try:
-        from app.services.mgwas_service import get_mgwas_db
-        mgwas = get_mgwas_db()
-        if mgwas is not None and "rsID" in mgwas.columns:
-            matches = mgwas[mgwas["rsID"].str.lower().str.contains(q, na=False)]
-            for name in matches["rsID"].unique()[:5]:
-                options.append({"label": f"{name}, SNP", "value": f"snp:{name}"})
-    except Exception:
-        pass
-
-    return options[:15]
+    return rows
 
 
 @callback(
     Output("home-search-redirect", "href", allow_duplicate=True),
-    Input("home-search-dropdown", "value"),
+    Input("home-search-btn", "n_clicks"),
+    Input("home-search-input", "n_submit"),
+    State("home-search-input", "value"),
     prevent_initial_call=True,
 )
-def home_search_go(value):
-    """Redirect home search to the appropriate entity detail page."""
-    if not value:
+def home_search_go(_n_clicks, _n_submit, value):
+    """Redirect home search to the full search page for free-text queries."""
+    if not value or len(value.strip()) < 2:
         return no_update
-    # value format: "etype:identifier" e.g. "metabolite:HMDB0000039" or "disease:Colorectal cancer"
-    if ":" in str(value):
-        etype, eid = value.split(":", 1)
-        _ENTITY_ROUTES = {
-            "metabolite": lambda v: f"/metabolite?id={v}",
-            "disease": lambda v: f"/disease-detail?name={v}",
-            "gene": lambda v: f"/gene?name={v}",
-            "protein": lambda v: f"/protein?name={v}",
-            "drug": lambda v: f"/drug?name={v}",
-            "microbe": lambda v: f"/microbe?name={v}",
-            "snp": lambda v: f"/snp?name={v}",
-        }
-        if etype in _ENTITY_ROUTES:
-            from urllib.parse import quote_plus
-            return _ENTITY_ROUTES[etype](quote_plus(eid))
-        return f"/search?q={eid}"
-    return f"/metabolite?id={value}"
+    return _home_search_href(value)
 
 
 # Export page_content for use in app/main.py page routing

@@ -80,8 +80,8 @@ layout = html.Div([
                 "All CoreMet datasets are released under the ",
                 html.A("CC BY 4.0", href="https://creativecommons.org/licenses/by/4.0/",
                        target="_blank", style={"fontWeight": "600"}),
-                " license. Data is updated quarterly. Last update: ",
-                html.Strong("March 2026"),
+                " license. Data is updated quarterly. Current release: ",
+                html.Strong("v1.0, June 2026"),
                 ".",
             ], style={"fontSize": "0.9rem", "color": "#4a5568", "marginBottom": "4px"}),
             html.P(
@@ -102,17 +102,17 @@ layout = html.Div([
         dbc.Row([
             _download_card(
                 "Complete Edge List", "All curated, deduplicated interactions across all seven layers.",
-                "CSV", _C["total"], "v3.0",
+                "CSV", _C["total"], "v1.0",
                 "/api/v1/download/full-edges", "#1a365d",
             ),
             _download_card(
                 "Node Metadata", "All entities with identifiers, aliases, and annotations.",
-                "JSON", "~50,000", "v3.0",
+                "JSON", "~50,000", "v1.0",
                 "/api/v1/download/node-metadata", "#1a365d",
             ),
             _download_card(
                 "Schema Documentation", "Data dictionary and column definitions.",
-                "Markdown", "-", "v3.0",
+                "Markdown", "-", "v1.0",
                 "/api/v1/download/schema", "#1a365d",
             ),
         ], className="g-3 mb-4"),
@@ -126,37 +126,37 @@ layout = html.Div([
         dbc.Row([
             _download_card(
                 "MPI: Metabolite–Protein", "Curated metabolite–protein binding/catalysis interactions.",
-                "CSV", _C["MPI"], "v3.0",
+                "CSV", _C["MPI"], "v1.0",
                 "/api/v1/download/mpi", "#3182ce",
             ),
             _download_card(
                 "MEI: Metabolite–Enzyme", "Metabolite–enzyme (EC) catalytic relationships.",
-                "CSV", _C["MEI"], "v3.0",
+                "CSV", _C["MEI"], "v1.0",
                 "/api/v1/download/mei", "#00a3c4",
             ),
             _download_card(
                 "MDI: Metabolite–Disease", "Metabolite–disease phenotype associations.",
-                "CSV", _C["MDI"], "v3.0",
+                "CSV", _C["MDI"], "v1.0",
                 "/api/v1/download/mdi", "#e53e3e",
             ),
             _download_card(
                 "MMI: Metabolite–Microbe", "Gut microbe metabolite production/consumption.",
-                "CSV", _C["MMI"], "v3.0",
+                "CSV", _C["MMI"], "v1.0",
                 "/api/v1/download/mmi", "#38a169",
             ),
             _download_card(
                 "MDrI: Metabolite–Drug", "Drug–metabolite pharmacokinetic interactions.",
-                "CSV", _C["MDrI"], "v3.0",
+                "CSV", _C["MDrI"], "v1.0",
                 "/api/v1/download/mdri", "#805ad5",
             ),
             _download_card(
                 "MGI: Metabolite–Gene", "Chemical–gene interactions from CTD.",
-                "CSV", _C["MGI"], "v3.0",
+                "CSV", _C["MGI"], "v1.0",
                 "/api/v1/download/mgi", "#d69e2e",
             ),
             _download_card(
                 "mGWAS: Metabolite–SNP", "GWAS-derived SNP–metabolite links.",
-                "CSV", _C["mGWAS"], "v3.0",
+                "CSV", _C["mGWAS"], "v1.0",
                 "/api/v1/download/mgwas", "#319795",
             ),
         ], className="g-3 mb-4"),
@@ -170,12 +170,12 @@ layout = html.Div([
         dbc.Row([
             _download_card(
                 "Node Embeddings", "128-dim GraphSAGE embeddings for all entities.",
-                "NPZ", "~50,000", "v3.0",
+                "NPZ", "~50,000", "v1.0",
                 "/api/v1/download/embeddings", "#718096", disabled=True,
             ),
             _download_card(
                 "Pre-trained Model", "GraphSAGE model weights for transfer learning.",
-                "PT", "-", "v3.0",
+                "PT", "-", "v1.0",
                 "/api/v1/download/model", "#718096", disabled=True,
             ),
         ], className="g-3 mb-5"),

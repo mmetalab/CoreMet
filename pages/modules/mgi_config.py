@@ -17,6 +17,7 @@ MGI_CONFIG = {
     'color': '#CC8400',
     'description': '1,658,745 metabolite–gene interactions from CTD (2025) covering 50,164 genes across 7 organisms',
     'data_transform': _mgi_transform,
+    'precomputed_summary': 'data/module_summaries/mgi_summary.json',
     'columns': {
         'display': ['Metabolite_Name', 'HMDB_ID', 'Gene_Symbol', 'Gene_ID',
                      'Organism', 'Interaction_Type', 'Interaction_Actions',

@@ -701,6 +701,12 @@ def run_network_search(
     if not query or len(query.strip()) < 2:
         return no_update, no_update
 
+    if triggered in (None, "url"):
+        # Keep the automatic first render lightweight on small Render instances.
+        # Users can still run all-layer searches via the search button/toggles.
+        types = ["MPI"]
+        max_nodes = min(max_nodes or 100, 100)
+
     from app.services.network_service import build_network_elements
 
     result = build_network_elements(

@@ -59,8 +59,9 @@ def _get_mpi_db() -> pd.DataFrame:
             return _mpi_cache
         try:
             from app.config import Config
+            from app.services.csv_loader import load_optimized
             _cfg = Config()
-            _mpi_cache = pd.read_csv(_cfg.MPI_DB_PATH, low_memory=False)
+            _mpi_cache = load_optimized(_cfg.MPI_DB_PATH)
             logger.info(f"MPI database loaded for network service: {len(_mpi_cache):,} records")
         except FileNotFoundError:
             logger.warning("MPI database not found for network service")
@@ -93,11 +94,21 @@ def _short_label(value, fallback: str = "", max_len: int = 30) -> str:
     return text[:max_len] if text else ""
 
 
+def _normalize_match_value(value: str) -> str:
+    """Normalize common metabolite label variants for query ranking."""
+    text = _clean_value(value).lower()
+    for prefix in ("d-", "l-", "dl-", "alpha-", "beta-"):
+        if text.startswith(prefix):
+            return text[len(prefix):]
+    return text
+
+
 def _match_any(df: pd.DataFrame, query: str, cols: list[str]) -> pd.DataFrame:
     """Return rows where any of *cols* match *query* (case-insensitive substring)."""
     if df.empty:
         return df
     q = query.strip().lower()
+    q_norm = _normalize_match_value(query)
     mask = pd.Series(False, index=df.index)
     for col in cols:
         if col in df.columns:
@@ -111,8 +122,10 @@ def _match_any(df: pd.DataFrame, query: str, cols: list[str]) -> pd.DataFrame:
         if col not in matches.columns:
             continue
         values = matches[col].astype(str).str.strip().str.lower()
+        normalized = values.map(_normalize_match_value)
         rank = rank.mask(values.str.startswith(q, na=False), 1)
         rank = rank.mask(values.eq(q), 0)
+        rank = rank.mask(normalized.eq(q_norm), 0)
     matches["_match_rank"] = rank
     matches = matches.sort_values("_match_rank").drop(columns=["_match_rank"])
     return matches
@@ -574,13 +587,6 @@ def get_available_organisms() -> list[str]:
         mei = get_mei_db()
         if not mei.empty and "Species" in mei.columns:
             orgs.update(_clean_value(org) for org in mei["Species"].dropna().unique())
-    except Exception:
-        pass
-    try:
-        from app.services.mmi_service import get_mmi_db
-        mmi = get_mmi_db()
-        if not mmi.empty and "Organism" in mmi.columns:
-            orgs.update(_clean_value(org) for org in mmi["Organism"].dropna().unique())
     except Exception:
         pass
     return sorted(org for org in orgs if org)

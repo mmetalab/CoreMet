@@ -29,7 +29,8 @@ def get_mpi_db() -> pd.DataFrame:
             cfg = Config()
             path = cfg.MPI_DB_PATH
             if path and path.exists():
-                df = pd.read_csv(path, low_memory=False)
+                from app.services.csv_loader import load_optimized
+                df = load_optimized(path)
                 # Standardize column names for graph traversal compatibility
                 col_map = {
                     "HMDB ID": "HMDB_ID",
@@ -39,10 +40,10 @@ def get_mpi_db() -> pd.DataFrame:
                     "Gene Name": "Gene_Name",
                 }
                 df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
-                # Fill NaN names
-                df["Metabolite_Name"] = df["Metabolite_Name"].fillna("")
-                df["Protein_Name"] = df["Protein_Name"].fillna("")
-                df["Gene_Name"] = df["Gene_Name"].fillna("")
+                # Keep string operations stable even when columns are categorical.
+                df["Metabolite_Name"] = df["Metabolite_Name"].astype("string").fillna("")
+                df["Protein_Name"] = df["Protein_Name"].astype("string").fillna("")
+                df["Gene_Name"] = df["Gene_Name"].astype("string").fillna("")
                 _mpi_db = df
                 logger.info(f"MPI service: loaded {len(df):,} interactions")
                 return _mpi_db

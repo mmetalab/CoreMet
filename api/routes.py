@@ -246,6 +246,41 @@ def database_search():
             return jsonify({"error": f"'{_param}' exceeds {_MAX_QUERY_LEN} characters"}), 400
 
     mask = pd.Series(True, index=mpi_db.index)
+    q_rank = None
+
+    # --- free-text/metabolite filter --------------------------------------
+    q = request.args.get("q", "").strip()
+    if q:
+        q_lower = q.lower()
+        q_norm = q_lower
+        for prefix in ("d-", "l-", "dl-", "alpha-", "beta-"):
+            if q_norm.startswith(prefix):
+                q_norm = q_norm[len(prefix):]
+        q_mask = pd.Series(False, index=mpi_db.index)
+        q_rank = pd.Series(99, index=mpi_db.index)
+        for col, base_rank in (
+            ("HMDB ID", 0),
+            ("Metabolite Name", 0),
+            ("Protein Name", 3),
+            ("Uniprot ID", 3),
+            ("Gene Name", 3),
+            ("Species", 6),
+            ("Pathway_Name", 6),
+        ):
+            if col in mpi_db.columns:
+                values = mpi_db[col].astype(str).str.strip().str.lower()
+                normalized = values
+                if col == "Metabolite Name":
+                    for prefix in ("d-", "l-", "dl-", "alpha-", "beta-"):
+                        normalized = normalized.str.replace(f"^{prefix}", "", regex=True)
+                contains = values.str.contains(q_lower, na=False, regex=False) | normalized.str.contains(q_norm, na=False, regex=False)
+                q_mask |= contains
+                exact = values.eq(q_lower) | normalized.eq(q_norm)
+                starts = values.str.startswith(q_lower, na=False) | normalized.str.startswith(q_norm, na=False)
+                q_rank = q_rank.mask(contains, base_rank + 2)
+                q_rank = q_rank.mask(starts, base_rank + 1)
+                q_rank = q_rank.mask(exact, base_rank)
+        mask &= q_mask
 
     # --- metabolite filter ------------------------------------------------
     metabolite_q = request.args.get("metabolite", "").strip()
@@ -287,7 +322,11 @@ def database_search():
     except (TypeError, ValueError):
         limit = 100
 
-    results = mpi_db.loc[mask].head(limit)
+    results = mpi_db.loc[mask].copy()
+    if q_rank is not None and not results.empty:
+        results["_api_rank"] = q_rank.loc[results.index]
+        results = results.sort_values("_api_rank").drop(columns=["_api_rank"])
+    results = results.head(limit)
 
     return jsonify(results.to_dict(orient="records")), 200
 

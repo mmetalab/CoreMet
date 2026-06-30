@@ -1,6 +1,6 @@
 """
-Disease Analysis page, interactive network explorer for pre-computed
-disease-specific metabolite-protein interaction predictions.
+Disease Analysis page, interactive network explorer built from CoreMet
+disease-metabolite associations and metabolite-protein interactions.
 
 Features:
   - Sidebar: disease selector, organism, confidence slider, network stats, export
@@ -10,6 +10,7 @@ Features:
 
 import io
 import json
+from functools import lru_cache
 
 from dash import dcc, html, Input, Output, State, callback, dash_table, no_update, ctx
 import dash_bootstrap_components as dbc
@@ -215,6 +216,21 @@ DISEASE_OPTIONS = [
 # Unique categories and tissues (for filter dropdowns)
 CATEGORY_OPTIONS = sorted({info["category"] for info in DISEASE_REGISTRY.values()})
 TISSUE_OPTIONS = sorted({info["tissue"] for info in DISEASE_REGISTRY.values()})
+
+
+@lru_cache(maxsize=1)
+def _available_disease_keys() -> frozenset[str]:
+    """Registry keys with at least one MDI-backed disease network."""
+    try:
+        from app.services.disease_service import DiseaseService
+        svc = DiseaseService()
+        keys = [
+            key for key, info in DISEASE_REGISTRY.items()
+            if svc.has_release_data(key, info["label"])
+        ]
+        return frozenset(keys)
+    except Exception:
+        return frozenset()
 
 CYTOSCAPE_STYLESHEET = [
     # Metabolite nodes, blue circles
@@ -601,12 +617,12 @@ layout = html.Div(
                                     className="cm-card mb-3",
                                 ),
 
-                                # Predictions DataTable
+                                # Disease-linked interaction DataTable
                                 html.Div(
                                     [
                                         html.H5(
                                             [html.I(className="fas fa-table me-2"),
-                                             "Predictions"],
+                                             "Disease-Linked Interactions"],
                                             className="cm-card-title",
                                         ),
                                         html.Div(id="disease-predictions-table"),
@@ -639,7 +655,11 @@ layout = html.Div(
 )
 def filter_disease_dropdown(category, tissue):
     """Filter the disease dropdown and tissue options based on category/tissue selection."""
-    filtered = DISEASE_REGISTRY.items()
+    available = _available_disease_keys()
+    filtered = [
+        (k, v) for k, v in DISEASE_REGISTRY.items()
+        if not available or k in available
+    ]
     if category:
         filtered = [(k, v) for k, v in filtered if v["category"] == category]
     # Build tissue options from current category-filtered set
@@ -668,11 +688,14 @@ def load_disease_data(disease, confidence):
     from app.services.disease_service import DiseaseService
 
     svc = DiseaseService()
-    data = svc.get_disease_data(disease)
+    disease_label = DISEASE_REGISTRY.get(disease, {}).get("label", disease)
+    data = svc.get_disease_data(disease, disease_label)
     if not data:
-        return no_update, no_update
+        return {"disease": disease, "network_stats": {}}, []
 
-    elements = svc.get_cytoscape_elements(disease, confidence_threshold=confidence or 0.3)
+    elements = svc.get_cytoscape_elements(
+        disease, confidence_threshold=confidence or 0.3, disease_label=disease_label
+    )
 
     # Serialise DataFrames
     store = {
@@ -689,7 +712,7 @@ def load_disease_data(disease, confidence):
         store["enrichment"] = enrich.to_json(orient="split")
 
     # Hub tables
-    hubs = svc.get_hub_tables(disease)
+    hubs = svc.get_hub_tables(disease, disease_label=disease_label)
     store["metabolite_hubs"] = hubs.get("metabolite_hubs", [])
     store["protein_hubs"] = hubs.get("protein_hubs", [])
 
@@ -885,10 +908,11 @@ def update_predictions_table(store):
         return html.P("No predictions available.", className="text-muted", style={"fontSize": "0.85rem"})
 
     # Round scores for display
-    if "Prediction Score" in preds_df.columns:
-        preds_df["Prediction Score"] = pd.to_numeric(
-            preds_df["Prediction Score"], errors="coerce"
-        ).round(5)
+    for score_col in ["Network Score", "Prediction Score", "Disease Evidence"]:
+        if score_col in preds_df.columns:
+            preds_df[score_col] = pd.to_numeric(
+                preds_df[score_col], errors="coerce"
+            ).round(5)
 
     return dash_table.DataTable(
         data=preds_df.to_dict("records"),

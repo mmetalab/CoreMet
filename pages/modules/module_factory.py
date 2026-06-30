@@ -7,7 +7,9 @@ The factory produces Dash layout components and registers callbacks.
 """
 
 import logging
+import json
 from functools import lru_cache
+from pathlib import Path
 
 import pandas as pd
 import dash_bootstrap_components as dbc
@@ -18,6 +20,62 @@ import plotly.graph_objects as go
 from components.page_header import make_page_header
 
 logger = logging.getLogger(__name__)
+
+_MISSING_LINK_VALUES = {"", "-", "nan", "none", "null", "<na>"}
+_DISPLAY_MISSING = "N/A"
+
+
+def _is_valid_external_value(value, url_template: str) -> bool:
+    text = str(value or "").strip()
+    if text.lower() in _MISSING_LINK_VALUES:
+        return False
+    template = str(url_template).lower()
+    upper = text.upper()
+    lower = text.lower()
+    if "hmdb.ca/metabolites" in template:
+        return upper.startswith("HMDB") and upper[4:].isdigit()
+    if "uniprot.org/uniprot" in template:
+        return bool(text) and " " not in text
+    if "drugbank.com/drugs" in template:
+        return upper.startswith("DB")
+    if "ncbi.nlm.nih.gov/snp" in template:
+        return lower.startswith("rs")
+    if "ncbi.nlm.nih.gov/gene" in template:
+        return text.isdigit()
+    return True
+
+
+def _format_external_link(value, url_template: str) -> str:
+    text = str(value or "").strip()
+    if not _is_valid_external_value(text, url_template):
+        return _DISPLAY_MISSING if text.lower() in _MISSING_LINK_VALUES else text
+    return f"[{text}]({url_template.format(value=text)})"
+
+
+def _fill_module_display_values(df: pd.DataFrame) -> pd.DataFrame:
+    """Make module tables readable without changing filtered source data."""
+    out = df.copy()
+    for col in out.columns:
+        out[col] = out[col].astype("string").fillna("").str.strip()
+        values = out[col]
+        out.loc[values.str.lower().isin(_MISSING_LINK_VALUES), col] = _DISPLAY_MISSING
+
+    protein_pairs = [
+        ("Protein Name", "Uniprot ID"),
+        ("Protein_Name", "Uniprot_ID"),
+        ("Enzyme_Name", "Uniprot_ID"),
+    ]
+    for name_col, id_col in protein_pairs:
+        if name_col not in out.columns or id_col not in out.columns:
+            continue
+        names = out[name_col].astype("string").fillna("").str.strip()
+        ids = out[id_col].astype("string").fillna("").str.strip()
+        missing_name = names.str.lower().isin(_MISSING_LINK_VALUES)
+        id_as_name = ids.ne("") & names.str.casefold().eq(ids.str.casefold())
+        mask = ids.ne("") & (missing_name | id_as_name)
+        out.loc[mask, name_col] = "UniProt " + ids[mask]
+
+    return out
 
 
 # ── Reusable stat card ───────────────────────────────────────────────
@@ -125,6 +183,29 @@ def _build_log_histogram(df, column, title, color="#319795", nbins=30):
                         color_discrete_sequence=[color])
     fig.update_layout(margin=dict(t=40, b=30, l=10, r=10), height=280,
                        font=dict(family="Arial, Helvetica, sans-serif", size=9), showlegend=False)
+    return fig
+
+
+def _build_counts_chart(counts, title, chart_type="bar_top", color="#0072B2"):
+    """Build a chart from precomputed value counts."""
+    series = pd.Series(counts or {}, dtype="int64")
+    if series.empty:
+        return None
+    if chart_type == "donut":
+        fig = px.pie(values=series.values, names=series.index, hole=0.45,
+                     title=title, color_discrete_sequence=px.colors.qualitative.Set2)
+        fig.update_layout(margin=dict(t=40, b=10, l=10, r=10), height=280,
+                          font=dict(family="Arial, Helvetica, sans-serif", size=10),
+                          showlegend=True, legend=dict(font=dict(size=8)))
+        fig.update_traces(textposition='inside', textinfo='percent+label',
+                          textfont_size=8)
+        return fig
+    fig = px.bar(x=series.values, y=series.index, orientation='h',
+                 title=title, labels={'x': 'Count', 'y': ''},
+                 color_discrete_sequence=[color])
+    fig.update_layout(margin=dict(t=40, b=30, l=10, r=10), height=350,
+                      font=dict(family="Arial, Helvetica, sans-serif", size=9),
+                      yaxis=dict(autorange='reversed'), showlegend=False)
     return fig
 
 
@@ -399,12 +480,31 @@ def register_module_callbacks(app, config, db_loader_fn):
     search_cols = config['columns'].get('search', display_cols)
 
     @lru_cache(maxsize=1)
+    def _get_precomputed_summary():
+        summary_path = config.get('precomputed_summary')
+        if not summary_path:
+            return {}
+        path = Path(summary_path)
+        if not path.is_absolute():
+            path = Path(__file__).parent.parent.parent / path
+        try:
+            return json.loads(path.read_text())
+        except Exception as exc:
+            logger.warning("Precomputed summary unavailable for %s: %s", key, exc)
+            return {}
+
+    @lru_cache(maxsize=1)
     def _get_df():
         df = db_loader_fn()
         # Apply data transform if configured (e.g., add evidence_type)
         transform_fn = config.get('data_transform')
         if transform_fn and callable(transform_fn):
             df = transform_fn(df)
+        try:
+            from app.services.metabolite_names import refine_metabolite_names_for_known_columns
+            df = refine_metabolite_names_for_known_columns(df)
+        except Exception as exc:
+            logger.debug("Metabolite-name refinement skipped for %s: %s", key, exc)
         # Ensure display columns exist
         for col in display_cols:
             if col not in df.columns:
@@ -417,6 +517,17 @@ def register_module_callbacks(app, config, db_loader_fn):
         Input(f"{prefix}-search", "id"),  # trigger on load
     )
     def update_stats(_):
+        summary = _get_precomputed_summary()
+        stat_values = summary.get("stat_cards", {})
+        if stat_values:
+            cards = []
+            for sc in config.get('stat_cards', []):
+                label = sc['label']
+                val = stat_values.get(label, 0)
+                cards.append(_stat_card(val, label, color=config['color'],
+                                        icon=sc.get('icon', 'fas fa-database')))
+            return cards
+
         df = _get_df()
         cards = []
         for sc in config.get('stat_cards', []):
@@ -438,6 +549,27 @@ def register_module_callbacks(app, config, db_loader_fn):
         Input(f"{prefix}-search", "id"),
     )
     def update_viz(_):
+        summary = _get_precomputed_summary()
+        chart_counts = summary.get("charts", {})
+        if chart_counts:
+            graphs = []
+            for vc in config.get('viz', []):
+                title = vc.get('title', '')
+                counts = chart_counts.get(title)
+                if counts is None:
+                    continue
+                fig = _build_counts_chart(
+                    counts, title,
+                    chart_type='donut' if vc.get('type') == 'donut' else 'bar_top',
+                    color=config['color'],
+                )
+                if fig is not None:
+                    graphs.append(dbc.Col(
+                        dcc.Graph(figure=fig, config={"displayModeBar": False}),
+                        md=4))
+            if graphs:
+                return dbc.Row(graphs, className="g-3")
+
         df = _get_df()
         viz_configs = config.get('viz', [])
         graphs = []
@@ -519,14 +651,12 @@ def register_module_callbacks(app, config, db_loader_fn):
             org_val = extra_vals[n_extra]
             if org_val and org_col in df.columns:
                 df = df[df[org_col].astype(str).isin([str(v) for v in org_val])]
-        out = df[display_cols].head(5000).copy()
+        out = _fill_module_display_values(df[display_cols].head(5000))
         # Add external links as markdown
         ext_links = config.get('external_links', {})
         for col, url_template in ext_links.items():
             if col in out.columns:
-                out[col] = out[col].apply(
-                    lambda v: f"[{v}]({url_template.format(value=v)})"
-                    if pd.notna(v) and str(v).strip() else str(v))
+                out[col] = out[col].apply(lambda v, _tpl=url_template: _format_external_link(v, _tpl))
         # Add source database links as markdown
         src_links = config.get('source_links', {})
         for col, url_map in src_links.items():
@@ -535,6 +665,8 @@ def register_module_callbacks(app, config, db_loader_fn):
                     if pd.isna(v) or not str(v).strip():
                         return str(v) if pd.notna(v) else ""
                     s = str(v).strip()
+                    if s.lower() in _MISSING_LINK_VALUES:
+                        return _DISPLAY_MISSING
                     url = _map.get(s)
                     if url:
                         return f"[{s}]({url})"
@@ -549,7 +681,7 @@ def register_module_callbacks(app, config, db_loader_fn):
         if pmid_col and pmid_col in out.columns:
             def _fmt_pmid(v):
                 if pd.isna(v) or not str(v).strip():
-                    return ""
+                    return _DISPLAY_MISSING
                 s = str(v).strip().rstrip('.0')
                 # Handle multiple PMIDs separated by ; or ,
                 first = s.split(';')[0].split(',')[0].strip()
@@ -570,14 +702,15 @@ def register_module_callbacks(app, config, db_loader_fn):
                 out[col] = out.apply(
                     lambda r, _c=col, _r=route, _p=param, _ic=id_col: (
                         f"[{r[_c]}]({_r}?{_p}={_qp(str(r[_ic]))})"
-                        if pd.notna(r[_c]) and str(r[_c]).strip() and pd.notna(r[_ic]) and str(r[_ic]).strip()
-                        else str(r[_c]) if pd.notna(r[_c]) else ""
+                        if pd.notna(r[_c]) and str(r[_c]).strip().lower() not in _MISSING_LINK_VALUES
+                        and pd.notna(r[_ic]) and str(r[_ic]).strip().lower() not in _MISSING_LINK_VALUES
+                        else str(r[_c]) if pd.notna(r[_c]) and str(r[_c]).strip().lower() not in _MISSING_LINK_VALUES else _DISPLAY_MISSING
                     ), axis=1)
             else:
                 out[col] = out[col].apply(
                     lambda v, _r=route, _p=param: (
                         f"[{v}]({_r}?{_p}={_qp(str(v))})"
-                        if pd.notna(v) and str(v).strip() else str(v)
+                        if pd.notna(v) and str(v).strip().lower() not in _MISSING_LINK_VALUES else _DISPLAY_MISSING
                     ))
         count_text = f"{len(df):,} records"
         return out.to_dict("records"), count_text

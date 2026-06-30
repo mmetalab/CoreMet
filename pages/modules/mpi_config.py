@@ -60,7 +60,7 @@ MPI_CONFIG = {
     },
     'entity_links': {
         'Metabolite Name': {'route': '/metabolite', 'param': 'id', 'id_col': 'HMDB ID'},
-        'Protein Name': {'route': '/protein', 'param': 'name'},
+        'Protein Name': {'route': '/protein', 'param': 'id', 'id_col': 'Uniprot ID'},
         'Gene Name': {'route': '/gene', 'param': 'name'},
     },
     'references': [

@@ -1,0 +1,56 @@
+{
+  "stat_cards": {
+    "Total Interactions": 1658745,
+    "Metabolites": 6615,
+    "Genes": 50164,
+    "Organisms": 7
+  },
+  "charts": {
+    "Evidence Type": {
+      "Experimental": 1658745
+    },
+    "Organism Distribution": {
+      "Homo sapiens": 684896,
+      "Mus musculus": 463045,
+      "Rattus norvegicus": 392282,
+      "Danio rerio": 97072,
+      "Caenorhabditis elegans": 10478,
+      "Bos taurus": 6484,
+      "Drosophila melanogaster": 4488
+    },
+    "Top Interaction Types": {
+      "increases expression": 486193,
+      "decreases expression": 461636,
+      "affects cotreatment": 254171,
+      "affects expression": 140423,
+      "affects reaction": 85306,
+      "increases methylation": 40694,
+      "affects binding": 31706,
+      "decreases methylation": 26851,
+      "affects methylation": 21305,
+      "increases abundance": 16924,
+      "decreases activity": 13909,
+      "increases activity": 12533,
+      "increases phosphorylation": 8475,
+      "affects response to substance": 7783,
+      "decreases phosphorylation": 6826
+    },
+    "Top Genes by Metabolite Count": {
+      "CASP3": 5434,
+      "TNF": 5186,
+      "IL1B": 3798,
+      "IL6": 3629,
+      "MAPK1": 3482,
+      "MAPK3": 3393,
+      "BAX": 3038,
+      "CAT": 3030,
+      "BCL2": 2988,
+      "RELA": 2885,
+      "NFE2L2": 2863,
+      "HMOX1": 2813,
+      "CYP1A1": 2634,
+      "PTGS2": 2592,
+      "AKT1": 2468
+    }
+  }
+}

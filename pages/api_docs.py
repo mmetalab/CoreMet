@@ -14,6 +14,7 @@ from components.page_header import make_page_header
 # ---------------------------------------------------------------------------
 
 BASE = "/api/v1"
+PUBLIC_BASE_URL = "https://www.coremet.org"
 
 ENDPOINTS = [
     {
@@ -22,7 +23,7 @@ ENDPOINTS = [
         "summary": "Health check",
         "desc": "Returns server status and version information.",
         "params": [],
-        "example_response": '{"status": "healthy", "version": "3.0.0"}',
+        "example_response": '{"status": "ok"}',
     },
     {
         "method": "GET",
@@ -35,21 +36,35 @@ ENDPOINTS = [
     {
         "method": "POST",
         "path": f"{BASE}/predict",
-        "summary": "Submit prediction job",
-        "desc": "Submit an asynchronous interaction prediction job. Returns a job ID for polling results.",
+        "summary": "Optional beta prediction job",
+        "desc": (
+            "Optional beta endpoint for metabolite-protein hypothesis generation. "
+            "The curated CoreMet database, browsing, downloads, and database API do not depend on prediction, "
+            "and database-only deployments may disable or slow this endpoint."
+        ),
         "params": [
-            ("metabolites", "body (JSON)", "List of HMDB IDs or metabolite names", True),
-            ("species", "body (JSON)", 'Target organism (default: "Homo sapiens")', False),
-            ("model", "body (JSON)", 'Model type: mpi, mdi, mmi, mdri (default: "mpi")', False),
-            ("top_k", "body (JSON)", "Number of top predictions to return (default: 50)", False),
+            ("metabolites[].name", "body (JSON)", "Metabolite display name", True),
+            ("metabolites[].hmdb_id", "body (JSON)", "HMDB accession", True),
+            ("metabolites[].smiles", "body (JSON)", "SMILES string used for molecular features", True),
+            ("proteins[].uniprot_id", "body (JSON)", "UniProt accession", True),
+            ("proteins[].name", "body (JSON)", "Protein display name", True),
+            ("proteins[].gene", "body (JSON)", "Gene symbol", True),
+            ("proteins[].organism", "body (JSON)", "Protein organism", True),
+            ("proteins[].sequence", "body (JSON)", "Protein sequence", True),
+            ("organism", "body (JSON)", 'Optional target organism label (default: "All")', False),
         ],
-        "example_response": '{"job_id": "abc123", "status": "queued"}',
+        "example_request": (
+            '{"metabolites":[{"name":"D-Glucose","hmdb_id":"HMDB0000122","smiles":"C(C1C(C(C(C(O1)O)O)O)O)O"}],'
+            '"proteins":[{"uniprot_id":"P35557","name":"Glucokinase","gene":"GCK","organism":"Homo sapiens",'
+            '"sequence":"M"}],"organism":"Homo sapiens"}'
+        ),
+        "example_response": '{"job_id": "abc123", "status": "running"}',
     },
     {
         "method": "GET",
         "path": f"{BASE}/results/<job_id>",
         "summary": "Get prediction results",
-        "desc": "Retrieve results for a previously submitted prediction job.",
+        "desc": "Retrieve results for a previously submitted optional beta prediction job.",
         "params": [
             ("job_id", "path", "Job identifier returned by /predict", True),
         ],
@@ -59,13 +74,15 @@ ENDPOINTS = [
         "method": "GET",
         "path": f"{BASE}/database/search",
         "summary": "Search MPI database",
-        "desc": "Query the metabolite–protein interaction database with filters.",
+        "desc": "Query the metabolite–protein interaction database with free-text search or structured filters.",
         "params": [
-            ("q", "query", "Search term (metabolite name or HMDB ID)", True),
+            ("q", "query", "Free-text search term across metabolite, protein, gene, species, and pathway fields", False),
+            ("metabolite", "query", "Metabolite name or HMDB ID", False),
+            ("protein", "query", "Protein name, UniProt ID, or gene name", False),
             ("species", "query", 'Filter by organism (default: all)', False),
             ("limit", "query", "Maximum results (default: 100, max: 1000)", False),
         ],
-        "example_response": '{"results": [...], "total": 42}',
+        "example_response": '[{"Metabolite Name": "D-Glucose", "Uniprot ID": "P35557", ...}]',
     },
     {
         "method": "GET",
@@ -73,7 +90,7 @@ ENDPOINTS = [
         "summary": "MMI database statistics",
         "desc": "Returns summary statistics for the Metabolite–Microbe Interaction database.",
         "params": [],
-        "example_response": '{"total": 83149, "metabolites": 1043, "microbes": 1262}',
+        "example_response": '{"total": 77605, "metabolites": 526, "microbes": 1262}',
     },
     {
         "method": "GET",
@@ -84,7 +101,7 @@ ENDPOINTS = [
             ("q", "query", "Search term", True),
             ("limit", "query", "Maximum results (default: 100)", False),
         ],
-        "example_response": '{"results": [...], "total": 15}',
+        "example_response": '[{"Metabolite_Name": "Butyrate", "Microbe_Name": "...", ...}]',
     },
     {
         "method": "GET",
@@ -103,7 +120,7 @@ ENDPOINTS = [
             ("q", "query", "Search term", True),
             ("limit", "query", "Maximum results (default: 100)", False),
         ],
-        "example_response": '{"results": [...], "total": 8}',
+        "example_response": '[{"Metabolite_Name": "Glucose", "Drug_Name": "Metformin", ...}]',
     },
     {
         "method": "GET",
@@ -175,11 +192,12 @@ def _build_endpoint_card(ep):
         ]
 
     # Example curl
-    curl_cmd = f"curl -s 'http://localhost:8080{ep['path']}'"
+    curl_cmd = f"curl -s '{PUBLIC_BASE_URL}{ep['path']}'"
     if method == "POST":
-        curl_cmd = (f'curl -X POST "http://localhost:8080{ep["path"]}" '
+        request_body = ep.get("example_request", '{"metabolites": []}')
+        curl_cmd = (f'curl -X POST "{PUBLIC_BASE_URL}{ep["path"]}" '
                     f'-H "Content-Type: application/json" '
-                    f'-d \'{{"metabolites": ["HMDB0000122"]}}\'')
+                    f"-d '{request_body}'")
 
     return dbc.AccordionItem([
         html.P(ep["desc"], className="text-muted", style={"fontSize": "0.9rem"}),
@@ -204,7 +222,7 @@ _cards = [_build_endpoint_card(ep) for ep in ENDPOINTS]
 page_content = html.Div([
     make_page_header(
         "API Documentation",
-        "Programmatic access to CoreMet databases and prediction engine.",
+        "Programmatic access to CoreMet databases, with prediction as an optional beta endpoint.",
         [("Home", "/home"), ("API Docs", None)],
     ),
     html.Div([
@@ -216,8 +234,9 @@ page_content = html.Div([
             ], className="cm-card-title mb-3"),
             html.P([
                 "CoreMet provides a REST API at ",
-                html.Code("http://your-host/api/v1/"),
-                " for programmatic access to all databases and the prediction engine. "
+                html.Code(f"{PUBLIC_BASE_URL}{BASE}/"),
+                " for programmatic access to all databases. "
+                "Prediction is available as an optional beta endpoint for hypothesis generation. "
                 "All endpoints return JSON (except CSV exports). "
                 "Rate limit: ",
                 html.Strong("100 requests/hour"),

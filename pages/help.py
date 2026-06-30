@@ -219,7 +219,7 @@ layout = html.Div([
                                 _para("CoreMet is free and open to all users. No login or registration required."),
                             ], title="Is CoreMet free to use?"),
                             dbc.AccordionItem([
-                                _para("Data is updated quarterly. The current version was last updated in March 2026."),
+                                _para("Data is updated quarterly. The current release is v1.0, updated in June 2026."),
                             ], title="How often is the database updated?"),
                             dbc.AccordionItem([
                                 _para("MPI refers to physical metabolite–protein binding, while MEI refers to "
@@ -262,7 +262,7 @@ layout = html.Div([
                         html.Ul([
                             html.Li("Cheng Wang, Developer & Lead Researcher"),
                             html.Li([html.A("GitHub Repository",
-                                            href="https://github.com/cormet/cormet-web", target="_blank")]),
+                                            href="https://github.com/mmetalab/CoreMet", target="_blank")]),
                         ], style={"fontSize": "0.88rem", "color": "#4a5568"}),
                     ]),
                 ], className="pt-3"),

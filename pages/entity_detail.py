@@ -1179,7 +1179,7 @@ def _build_interactions(data, cfg):
         "AGORA2": "https://www.vmh.life/#microbe",
         "DrugBank_cross_ref": "https://go.drugbank.com/",
         "DrugBank_enzyme_bridge": "https://go.drugbank.com/",
-        "CoreMet_curated": "https://coremetdb.org/",
+        "CoreMet_curated": "https://coremet.org/",
         "GWAS_Catalog": "https://www.ebi.ac.uk/gwas/",
         "Shin2014": "https://pubmed.ncbi.nlm.nih.gov/24816252/",
         "Yin2024": "https://pubmed.ncbi.nlm.nih.gov/38120091/",

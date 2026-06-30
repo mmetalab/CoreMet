@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 compute_use_cases.py — Cross-layer traversal counts for the four CoreMet
-manuscript use cases, computed from the canonical v3 CSVs (MPI curated-only).
+manuscript use cases, computed from the v1.0 release CSVs (MPI curated-only).
 
 Writes data/coremetdb_use_cases.json. Feeds Manuscript "Use Cases" + Figure 3.
 
@@ -18,13 +18,13 @@ OUT = DATA / "coremetdb_use_cases.json"
 CHUNK = 200_000
 
 FILES = {
-    "MPI":  (DATA / "mpidatabase" / "MPIDB_v3.csv",            "HMDB ID",  "Uniprot ID"),
-    "MEI":  (DATA / "databases" / "mei_database_v2_enriched.csv", "HMDB_ID", "EC_Number"),
-    "MDI":  (DATA / "databases" / "mdi_database_v3.csv",       "HMDB_ID",  "Disease_Name"),
-    "MMI":  (DATA / "databases" / "mmi_database_v3.csv",       "HMDB_ID",  "Microbe_Name"),
-    "MDrI": (DATA / "databases" / "mdri_database_v3.csv",      "HMDB_ID",  "Drug_Name"),
-    "MGI":  (DATA / "databases" / "mgi_database_v3.csv",       "HMDB_ID",  "Gene_Symbol"),
-    "mGWAS":(DATA / "databases" / "mgwas_database_v3.csv",     "HMDB_ID",  "rsID"),
+    "MPI":  (DATA / "databases" / "release" / "coremetdb_mpi.csv",   "HMDB ID",  "Uniprot ID"),
+    "MEI":  (DATA / "databases" / "release" / "coremetdb_mei.csv",   "HMDB_ID", "EC_Number"),
+    "MDI":  (DATA / "databases" / "release" / "coremetdb_mdi.csv",   "HMDB_ID",  "Disease_Name"),
+    "MMI":  (DATA / "databases" / "release" / "coremetdb_mmi.csv",   "HMDB_ID",  "Microbe_Name"),
+    "MDrI": (DATA / "databases" / "release" / "coremetdb_mdri.csv",  "HMDB_ID",  "Drug_Name"),
+    "MGI":  (DATA / "databases" / "release" / "coremetdb_mgi.csv",   "HMDB_ID",  "Gene_Symbol"),
+    "mGWAS":(DATA / "databases" / "release" / "coremetdb_mgwas.csv", "HMDB_ID",  "rsID"),
 }
 
 

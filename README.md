@@ -10,7 +10,7 @@ microbes, drugs, genes, and genomic variants in a single query.
 | | |
 |---|---|
 | **Interactions** | 1,952,688 (7 curated interaction types) |
-| **Metabolites** | 30,674 (HMDB-anchored; 60 present in all 7 layers) |
+| **Metabolites** | 30,674 unique metabolite records; HMDB IDs are supplied where available |
 | **Provenance** | 5-level evidence hierarchy, normalized confidence, PubMed refs |
 | **Access** | Web UI, 15 REST endpoints, bulk CSV download, no login |
 | **Stack** | Python, Dash/Flask, deployed on Render |
@@ -87,5 +87,5 @@ Code: MIT (see [LICENSE](LICENSE)). Data: CC BY 4.0.
 
 ## Citation
 
-A formal citation will be available once the CoreMet manuscript is published
-(in preparation, 2026). Please link to the resource URL in the meantime.
+A formal citation will be available once the CoreMet manuscript is published.
+Please cite the v1.0 release (June 2026) and link to the resource URL in the meantime.

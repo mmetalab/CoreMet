@@ -6,6 +6,7 @@ All callback IDs prefixed with 'dbv2-'.
 """
 
 import io
+import json
 import math
 
 import pandas as pd
@@ -25,12 +26,12 @@ import dash_bootstrap_components as dbc
 
 from components.page_header import make_page_header
 from app.config import Config
-from app.services.mei_service import get_mei_db, get_mei_stats
-from app.services.mdi_service import get_mdi_db, get_mdi_stats
-from app.services.mmi_service import get_mmi_db, get_mmi_stats
-from app.services.mdri_service import get_mdri_db, get_mdri_stats
-from app.services.mgwas_service import get_mgwas_db, get_mgwas_stats
-from app.services.mgi_service import get_mgi_db, get_mgi_stats
+from app.services.mei_service import get_mei_db
+from app.services.mdi_service import get_mdi_db
+from app.services.mmi_service import get_mmi_db
+from app.services.mdri_service import get_mdri_db
+from app.services.mgwas_service import get_mgwas_db
+from app.services.mgi_service import get_mgi_db
 from functools import lru_cache
 
 # ---------------------------------------------------------------------------
@@ -49,7 +50,8 @@ def _get_df():
     try:
         from pathlib import Path as _P
         _rel = _P(__file__).parent.parent / "data" / "databases" / "release" / "coremetdb_mpi.csv"
-        _df_raw = pd.read_csv(_rel if _rel.exists() else _cfg.MPI_DB_PATH, low_memory=False)
+        from app.services.csv_loader import load_optimized
+        _df_raw = load_optimized(_rel if _rel.exists() else _cfg.MPI_DB_PATH)
     except FileNotFoundError:
         _df_raw = pd.DataFrame(columns=[
             "Species", "Metabolite Name", "HMDB ID", "SMILES",
@@ -60,17 +62,16 @@ def _get_df():
     for _col, _default in [("Evidence_Source", "original"), ("Pathway_ID", ""), ("Pathway_Name", "")]:
         if _col not in _df_raw.columns:
             _df_raw[_col] = _default
-    _df_raw = _df_raw.fillna("")
     # Pre-build concatenated search column for fast vectorized search
     _df_raw["_search_text"] = (
-        _df_raw["Species"].str.lower() + " " +
-        _df_raw["Metabolite Name"].str.lower() + " " +
-        _df_raw["HMDB ID"].str.lower() + " " +
-        _df_raw["Uniprot ID"].str.lower() + " " +
-        _df_raw["Protein Name"].str.lower() + " " +
-        _df_raw["Gene Name"].str.lower() + " " +
-        _df_raw["Pathway_Name"].str.lower() + " " +
-        _df_raw["Evidence_Source"].str.lower()
+        _df_raw["Species"].astype("string").fillna("").str.lower() + " " +
+        _df_raw["Metabolite Name"].astype("string").fillna("").str.lower() + " " +
+        _df_raw["HMDB ID"].astype("string").fillna("").str.lower() + " " +
+        _df_raw["Uniprot ID"].astype("string").fillna("").str.lower() + " " +
+        _df_raw["Protein Name"].astype("string").fillna("").str.lower() + " " +
+        _df_raw["Gene Name"].astype("string").fillna("").str.lower() + " " +
+        _df_raw["Pathway_Name"].astype("string").fillna("").str.lower() + " " +
+        _df_raw["Evidence_Source"].astype("string").fillna("").str.lower()
     )
     return _df_raw
 
@@ -117,6 +118,10 @@ def _fill_display_blanks(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def _valid_hmdb_mask(series: pd.Series) -> pd.Series:
+    return series.astype(str).str.strip().str.match(r"^HMDB\d+$", na=False)
+
+
 def _first_real_value_map(df: pd.DataFrame, key_col: str, value_col: str) -> dict:
     """Map IDs to the first informative value, skipping blanks and ID placeholders."""
     if key_col not in df.columns or value_col not in df.columns:
@@ -132,6 +137,8 @@ def _first_real_value_map(df: pd.DataFrame, key_col: str, value_col: str) -> dic
 
 def _refine_combined_mpi(df: pd.DataFrame) -> pd.DataFrame:
     """Fill display-critical MPI/MEI fields so Browse does not show empty cells."""
+    from app.services.metabolite_names import refine_metabolite_names
+
     df = df.copy()
     for col in [
         "Species", "Metabolite Name", "HMDB ID", "Uniprot ID", "Protein Name",
@@ -165,11 +172,7 @@ def _refine_combined_mpi(df: pd.DataFrame) -> pd.DataFrame:
     uniprot = _clean_series(df["Uniprot ID"])
     ec_number = _clean_series(df["EC_Number"])
 
-    met = _clean_series(df["Metabolite Name"])
-    df.loc[met.eq("") & hmdb.ne(""), "Metabolite Name"] = "Metabolite name unavailable"
-    same_as_hmdb = hmdb.ne("") & _clean_series(df["Metabolite Name"]).str.casefold().eq(hmdb.str.casefold())
-    df.loc[same_as_hmdb, "Metabolite Name"] = "Metabolite name unavailable"
-    df.loc[met.eq("") & hmdb.eq(""), "Metabolite Name"] = "Unspecified metabolite"
+    df = refine_metabolite_names(df, "Metabolite Name", "HMDB ID")
 
     protein = _clean_series(df["Protein Name"])
     df.loc[protein.eq("") & ec_number.ne(""), "Protein Name"] = "Enzyme EC " + ec_number[protein.eq("") & ec_number.ne("")]
@@ -268,11 +271,46 @@ def _ensure_filter_options():
     _ALL_PATHWAYS = sorted(pw_set)
 
 
-# Populate filter options at module load time so sidebar is never empty
-_ensure_filter_options()
-
 # Page-level constants
 PAGE_SIZE = 20
+
+
+@lru_cache(maxsize=1)
+def _get_release_stats() -> dict:
+    """Read lightweight release metadata without loading interaction CSVs."""
+    stats_path = _cfg.DATA_DIR / "coremetdb_stats.json"
+    try:
+        return json.loads(stats_path.read_text())
+    except Exception:
+        return {}
+
+
+def _stat_db(key: str) -> dict:
+    return _get_release_stats().get("databases", {}).get(key, {})
+
+
+def _stat_value(key: str, field: str, default: int = 0) -> int:
+    value = _stat_db(key).get(field, default)
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return default
+
+
+def _combined_mpi_stat(field: str) -> int:
+    if field == "interactions":
+        return _stat_value("MPI", field) + _stat_value("MEI", field)
+    if field == "targets":
+        return _stat_value("MPI", field) + _stat_value("MEI", field)
+    return max(_stat_value("MPI", field), _stat_value("MEI", field))
+
+
+def _fmt_stat(value: int) -> str:
+    return f"{value:,}" if value else "0"
+
+
+def _is_db_available(key: str) -> bool:
+    return _stat_value(key, "interactions") > 0
 
 # Evidence-source badge color mapping (CSS-safe inline colors)
 SOURCE_COLORS = {
@@ -359,6 +397,10 @@ def _source_badge(source: str) -> str:
 
 def _make_stat_cards_row():
     """Four stat cards (dynamically updated via callback outputs)."""
+    initial_total = _combined_mpi_stat("interactions")
+    initial_metabolites = _combined_mpi_stat("metabolites")
+    initial_targets = _combined_mpi_stat("targets")
+    initial_organisms = _combined_mpi_stat("organisms")
     return dbc.Row(
         [
             dbc.Col(
@@ -366,7 +408,7 @@ def _make_stat_cards_row():
                     [
                         html.Div(html.I(className="fas fa-dna"), className="stat-icon"),
                         html.Div(
-                            f"{len(_get_df()):,}",
+                            _fmt_stat(initial_total),
                             id="dbv2-stat-total",
                             className="stat-value",
                         ),
@@ -381,7 +423,7 @@ def _make_stat_cards_row():
                     [
                         html.Div(html.I(className="fas fa-flask"), className="stat-icon"),
                         html.Div(
-                            f"{_get_df()['HMDB ID'].nunique():,}",
+                            _fmt_stat(initial_metabolites),
                             id="dbv2-stat-metabolites",
                             className="stat-value",
                         ),
@@ -396,7 +438,7 @@ def _make_stat_cards_row():
                     [
                         html.Div(html.I(className="fas fa-microscope"), className="stat-icon"),
                         html.Div(
-                            f"{_get_df()['Uniprot ID'].nunique():,}",
+                            _fmt_stat(initial_targets),
                             id="dbv2-stat-proteins",
                             className="stat-value",
                         ),
@@ -411,7 +453,7 @@ def _make_stat_cards_row():
                     [
                         html.Div(html.I(className="fas fa-globe"), className="stat-icon"),
                         html.Div(
-                            f"{_get_df()['Species'].nunique():,}",
+                            _fmt_stat(initial_organisms),
                             id="dbv2-stat-organisms",
                             className="stat-value",
                         ),
@@ -525,19 +567,9 @@ def _make_sidebar():
 
 def _make_table_section():
     """Global search bar, DataTable, pagination info, and CSV download."""
-    # Provide initial data so the page is never visually empty
-    initial_df = _get_combined_mpi().head(PAGE_SIZE)
-    initial_display_cols = [
-        "Species", "Metabolite Name", "HMDB ID", "Uniprot ID",
-        "Protein Name", "Gene Name", "EC_Number", "Pathway_Name", "Evidence_Source",
-    ]
-    if not initial_df.empty:
-        initial_display = _fill_display_blanks(initial_df[initial_display_cols])
-        # We intentionally skip _add_markdown_links here to avoid import-time
-        # NameError; markdown links are added in the callback for all updates.
-        initial_records = initial_display.to_dict("records")
-    else:
-        initial_records = []
+    # The callback populates rows once /database is opened. Keeping layout
+    # construction data-free prevents app startup from loading large CSVs.
+    initial_records = []
     return html.Div(
         [
             # ── Global search bar ─────────────────────────
@@ -748,53 +780,53 @@ layout = html.Div(
                                 {"label": html.Span([
                                     html.I(className="fas fa-dna me-1"),
                                     "Metabolite–Protein (MPI)",
-                                    dbc.Badge(f"{len(_get_combined_mpi()):,}", className="ms-2", color="primary", pill=True),
+                                    dbc.Badge(_fmt_stat(_combined_mpi_stat("interactions")), className="ms-2", color="primary", pill=True),
                                 ]), "value": "mpi"},
                                 {"label": html.Span([
                                     html.I(className="fas fa-heartbeat me-1"),
                                     "Metabolite–Disease (MDI)",
-                                    dbc.Badge(f"{len(get_mdi_db()):,}", className="ms-2", color="danger", pill=True),
+                                    dbc.Badge(_fmt_stat(_stat_value("MDI", "interactions")), className="ms-2", color="danger", pill=True),
                                 ]), "value": "mdi"},
                                 {"label": html.Span([
-                                    html.I(className="fas fa-bacteria me-1") if get_mmi_stats()["available"] else html.I(className="fas fa-bacterium me-1"),
+                                    html.I(className="fas fa-bacteria me-1") if _is_db_available("MMI") else html.I(className="fas fa-bacterium me-1"),
                                     "Metabolite–Microbe (MMI)",
                                     dbc.Badge(
-                                        f"{len(get_mmi_db()):,}" if get_mmi_stats()["available"] else "Coming Soon",
+                                        _fmt_stat(_stat_value("MMI", "interactions")) if _is_db_available("MMI") else "Coming Soon",
                                         className="ms-2",
-                                        color="warning" if get_mmi_stats()["available"] else "secondary",
+                                        color="warning" if _is_db_available("MMI") else "secondary",
                                         pill=True,
                                     ),
-                                ]), "value": "mmi", "disabled": not get_mmi_stats()["available"]},
+                                ]), "value": "mmi", "disabled": not _is_db_available("MMI")},
                                 {"label": html.Span([
                                     html.I(className="fas fa-pills me-1"),
                                     "Metabolite–Drug (MDrI)",
                                     dbc.Badge(
-                                        f"{len(get_mdri_db()):,}" if get_mdri_stats()["available"] else "Coming Soon",
+                                        _fmt_stat(_stat_value("MDrI", "interactions")) if _is_db_available("MDrI") else "Coming Soon",
                                         className="ms-2",
-                                        color="info" if get_mdri_stats()["available"] else "secondary",
+                                        color="info" if _is_db_available("MDrI") else "secondary",
                                         pill=True,
                                     ),
-                                ]), "value": "mdri", "disabled": not get_mdri_stats()["available"]},
+                                ]), "value": "mdri", "disabled": not _is_db_available("MDrI")},
                                 {"label": html.Span([
                                     html.I(className="fas fa-map-marker-alt me-1"),
                                     "Metabolite–SNP (mGWAS)",
                                     dbc.Badge(
-                                        f"{len(get_mgwas_db()):,}" if get_mgwas_stats()["available"] else "Coming Soon",
+                                        _fmt_stat(_stat_value("mGWAS", "interactions")) if _is_db_available("mGWAS") else "Coming Soon",
                                         className="ms-2",
-                                        color="success" if get_mgwas_stats()["available"] else "secondary",
+                                        color="success" if _is_db_available("mGWAS") else "secondary",
                                         pill=True,
                                     ),
-                                ]), "value": "mgwas", "disabled": not get_mgwas_stats()["available"]},
+                                ]), "value": "mgwas", "disabled": not _is_db_available("mGWAS")},
                                 {"label": html.Span([
                                     html.I(className="fas fa-dna me-1"),
                                     "Metabolite–Gene (MGI)",
                                     dbc.Badge(
-                                        f"{len(get_mgi_db()):,}" if get_mgi_stats()["available"] else "Coming Soon",
+                                        _fmt_stat(_stat_value("MGI", "interactions")) if _is_db_available("MGI") else "Coming Soon",
                                         className="ms-2",
-                                        color="warning" if get_mgi_stats()["available"] else "secondary",
+                                        color="warning" if _is_db_available("MGI") else "secondary",
                                         pill=True,
                                     ),
-                                ]), "value": "mgi", "disabled": not get_mgi_stats()["available"]},
+                                ]), "value": "mgi", "disabled": not _is_db_available("MGI")},
                             ],
                             value="mpi",
                             inline=True,
@@ -813,10 +845,10 @@ layout = html.Div(
                         html.Span(
                             id="dbv2-summary-text",
                             children=(
-                                f"{len(_get_df()):,} interactions across "
-                                f"{_get_df()['HMDB ID'].nunique():,} metabolites and "
-                                f"{_get_df()['Uniprot ID'].nunique():,} proteins "
-                                f"in {_get_df()['Species'].nunique():,} organisms."
+                                f"{_fmt_stat(_combined_mpi_stat('interactions'))} interactions across "
+                                f"{_fmt_stat(_combined_mpi_stat('metabolites'))} metabolites and "
+                                f"{_fmt_stat(_combined_mpi_stat('targets'))} proteins/enzymes "
+                                f"in {_fmt_stat(_combined_mpi_stat('organisms'))} organisms."
                             ),
                             style={"color": "var(--cm-text-secondary)"},
                         ),
@@ -959,7 +991,7 @@ def _add_markdown_links(df: pd.DataFrame, interaction_type="mpi") -> pd.DataFram
     if met_col in df.columns:
         met_strs = df[met_col].astype(str)
         hmdb_strs = df[hmdb_col].astype(str) if hmdb_col in df.columns else pd.Series("", index=df.index)
-        has_hmdb = hmdb_strs.str.len() > 0
+        has_hmdb = _valid_hmdb_mask(hmdb_strs)
         has_hmdb &= ~hmdb_strs.str.lower().isin(_MISSING_TOKENS | {"-"})
         # With HMDB ID: link by id
         df.loc[has_hmdb, met_col] = (
@@ -973,7 +1005,7 @@ def _add_markdown_links(df: pd.DataFrame, interaction_type="mpi") -> pd.DataFram
 
     if hmdb_col in df.columns:
         hmdb_strs = df[hmdb_col].astype(str)
-        hmdb_mask = hmdb_strs.str.len() > 0
+        hmdb_mask = _valid_hmdb_mask(hmdb_strs)
         hmdb_mask &= ~hmdb_strs.str.lower().isin(_MISSING_TOKENS | {"-"})
         # Skip if already turned into metabolite link (would double-encode)
         hmdb_mask &= ~df[hmdb_col].astype(str).str.startswith("[")

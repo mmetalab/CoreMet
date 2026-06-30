@@ -255,7 +255,7 @@ def _case_study_card(
 def _workflow_card():
     steps = [
         ("fa-database", "Database Query", "Search 377K+ curated interactions across MPI, MEI, MDI, MMI, and MDrI modules."),
-        ("fa-heartbeat", "Disease Panel", "Select from 130 pre-computed disease panels spanning 22 categories."),
+        ("fa-heartbeat", "Disease Panel", "Select from 112 release-backed disease network panels spanning 22 categories."),
         ("fa-brain", "ML Prediction", "Run GraphSAGE-based prediction for novel metabolite–protein interactions."),
         ("fa-chart-bar", "Enrichment", "Identify enriched KEGG pathways with Fisher's exact test (BH-corrected)."),
         ("fa-project-diagram", "Network Viz", "Visualise interaction networks with hub detection and community analysis."),
@@ -341,7 +341,7 @@ def _cross_disease_card():
             html.I(className="fas fa-lightbulb me-2", style={"color": _PAL["orange"]}),
             html.Span(
                 "This unique-hub pattern supports disease-specific metabolomic signatures "
-                "and validates the discriminatory power of the CoreMet prediction engine.",
+                "and illustrates the optional CoreMet prediction layer.",
                 style={"fontSize": "0.85rem", "color": "#2d3748"},
             ),
         ], style={
@@ -375,7 +375,7 @@ layout = html.Div([
             tissue="Liver",
             description=(
                 "Hepatocellular carcinoma (HCC) is the most common primary liver malignancy. "
-                "Using CoreMet's GraphSAGE-based prediction engine, we predicted 1,635 metabolite–protein "
+                "Using CoreMet's optional GraphSAGE-based prediction layer, we predicted 1,635 metabolite–protein "
                 "interactions from 20 HCC-associated metabolites and 15 key liver-cancer proteins. "
                 "Network analysis reveals central metabolic hubs driving the Warburg effect."
             ),
@@ -451,7 +451,7 @@ layout = html.Div([
         html.Div([
             html.H5("Start Your Own Discovery", style={"fontWeight": "700", "color": _PAL["navy"], "marginBottom": "8px"}),
             html.P(
-                "CoreMet provides 130 pre-computed disease panels, GraphSAGE-based interaction prediction, "
+                "CoreMet provides 112 release-backed disease network panels, optional GraphSAGE-based interaction prediction, "
                 "and pathway enrichment, ready for your metabolomics research.",
                 style={"fontSize": "0.9rem", "color": _PAL["grey"], "marginBottom": "16px"},
             ),

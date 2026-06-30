@@ -105,12 +105,15 @@ def create_app(config_name='default'):
     # Store module layouts, update the existing dict (mutable, shared ref)
     _MODULE_LAYOUTS.update(_module_layouts)
 
-    # ── Build CoreMet ID registry ────────────────────────────
-    try:
-        from app.services.entity_registry import build_registry
-        build_registry()
-    except Exception as e:
-        logger.warning("Failed to build entity registry: %s", e)
+    # ── CoreMet ID registry ─────────────────────────────────
+    # Keep this lazy in production: loading the JSON registry as Python dicts adds
+    # a large resident-memory block, and most routes do not need it at startup.
+    if os.getenv("COREMET_EAGER_REGISTRY", "").lower() in {"1", "true", "yes"}:
+        try:
+            from app.services.entity_registry import build_registry
+            build_registry()
+        except Exception as e:
+            logger.warning("Failed to build entity registry: %s", e)
 
     # Main layout, navbar and footer are OUTSIDE the page-swapped area
     app.layout = html.Div([
