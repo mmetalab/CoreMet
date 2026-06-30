@@ -8,7 +8,8 @@ so scripts/fetch_data.py can extract straight into CoreMet/data/.
 
 Core (database app: browse, search, profile, network, download, API):
   coremetdb_stats.json, coremetdb_use_cases.json, coremetdb_entity_registry.json,
-  databases/release/coremetdb_*.csv, mpidatabase/MPIDB_v3.csv
+  databases/release/coremetdb_*.csv, mpidatabase/MPIDB_v3.csv,
+  module_summaries/*.json
 
     conda run -n mpi-vgae python scripts/build_runtime_bundle.py
 """
@@ -26,6 +27,8 @@ MEMBERS = [
     "coremetdb_use_cases.json",
     "coremetdb_entity_registry.json",
     "mpidatabase/MPIDB_v3.csv",
+    "module_summaries/mgi_summary.json",
+    "module_summaries/mmi_summary.json",
 ] + [f"databases/release/coremetdb_{k}.csv"
      for k in ("mpi", "mei", "mdi", "mmi", "mdri", "mgi", "mgwas")]
 

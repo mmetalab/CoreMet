@@ -17,9 +17,9 @@ ROOT = Path(__file__).resolve().parent.parent
 REL = ROOT / "data" / "databases" / "release"
 STATS = ROOT / "data" / "coremetdb_stats.json"
 README = ROOT / "DATA_README.md"
-OUT_DIR = ROOT.parent / "data_deposit"
+OUT_DIR = ROOT.parent / "CoreMetDB"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
-OUT = OUT_DIR / "CoreMet_dataset_v1.zip"
+OUT = OUT_DIR / "coremet_dataset_v1.zip"
 
 FILES = [REL / f"coremetdb_{k}.csv" for k in
          ("mpi", "mei", "mdi", "mmi", "mdri", "mgi", "mgwas")] + [STATS, README]
@@ -32,7 +32,7 @@ def main() -> None:
     total_rows = 0
     with zipfile.ZipFile(OUT, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
         for f in FILES:
-            z.write(f, arcname=f"CoreMet_v1/{f.name}")
+            z.write(f, arcname=f"CoreMet-DB_v1/{f.name}")
             if f.suffix == ".csv":
                 with open(f) as fh:
                     total_rows += sum(1 for _ in fh) - 1
